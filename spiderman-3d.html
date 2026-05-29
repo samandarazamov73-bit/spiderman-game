@@ -88,12 +88,12 @@
   </div>
   <div id="help">
     <h2>УПРАВЛЕНИЕ</h2>
-    <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — движение</div>
-    <div><kbd>Мышь</kbd> — осмотр / прицел</div>
-    <div><kbd>Пробел</kbd> — взлёт / подъём</div>
-    <div><kbd>Shift</kbd> — снижение</div>
+    <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — полёт (W — куда смотришь)</div>
+    <div><kbd>Мышь</kbd> — обзор / прицел</div>
+    <div><kbd>Shift</kbd> — ускорение (буст)</div>
+    <div><kbd>Пробел</kbd> — вверх &nbsp; <kbd>C</kbd> — вниз</div>
     <div><kbd>ЛКМ</kbd> — выстрелить паутиной</div>
-    <div><kbd>F</kbd> — переключить полёт / паутина</div>
+    <div><kbd>F</kbd> — полёт / паутина</div>
     <div><kbd>H</kbd> — скрыть подсказку</div>
   </div>
 </div>
@@ -102,8 +102,8 @@
   <h1>ЧЕЛОВЕК-ПАУК 3D</h1>
   <p>Летай и раскачивайся на паутине над городом</p>
   <div class="ctrls">
-    <div><kbd>W A S D</kbd> движение &nbsp;•&nbsp; <kbd>Мышь</kbd> обзор &nbsp;•&nbsp; <kbd>Пробел</kbd> вверх</div>
-    <div><kbd>ЛКМ</kbd> паутина &nbsp;•&nbsp; <kbd>F</kbd> режим полёта &nbsp;•&nbsp; <kbd>Shift</kbd> вниз</div>
+    <div><kbd>W A S D</kbd> полёт &nbsp;•&nbsp; <kbd>Мышь</kbd> обзор &nbsp;•&nbsp; <kbd>Shift</kbd> ускорение</div>
+    <div><kbd>Пробел</kbd> вверх &nbsp;•&nbsp; <kbd>C</kbd> вниз &nbsp;•&nbsp; <kbd>ЛКМ</kbd> паутина &nbsp;•&nbsp; <kbd>F</kbd> режим</div>
   </div>
   <button id="playBtn">ИГРАТЬ</button>
 </div>
@@ -409,11 +409,14 @@ const state = {
   onGround: false,
 };
 
-const GRAV = 60;
-const FLY_ACCEL = 130;
-const FLY_MAX = 140;
-const FLY_DAMP = 0.92;
-const SWING_PUMP = 36;
+const GRAV = 62;            // гравитация (только в режиме паутины)
+// --- Полёт: модель «целевой скорости» (отзывчиво и точно) ---
+const FLY_SPEED = 115;      // базовая крейсерская скорость
+const FLY_BOOST = 260;      // скорость с ускорением (Shift)
+const FLY_RESPONSE = 7;     // отзывчивость управления (больше = резче)
+const VERT_SPEED = 95;      // скорость набора/снижения высоты
+// --- Паутина ---
+const SWING_PUMP = 55;      // сила «подкачки» при раскачивании
 
 addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -567,29 +570,31 @@ function update(dt) {
 }
 
 function flyUpdate(dt) {
-  const accel = new THREE.Vector3();
-  if (keys['KeyW']) accel.add(forward);
-  if (keys['KeyS']) accel.sub(forward);
-  if (keys['KeyD']) accel.add(right);
-  if (keys['KeyA']) accel.sub(right);
-  if (accel.lengthSq() > 0) {
-    accel.normalize().multiplyScalar(FLY_ACCEL);
-    state.vel.addScaledVector(accel, dt);
-  }
-  // вертикаль
-  if (keys['Space']) state.vel.y += FLY_ACCEL * dt;
-  if (keys['ShiftLeft'] || keys['ShiftRight']) state.vel.y -= FLY_ACCEL * dt;
+  // Модель «целевой скорости»: вычисляем куда хотим лететь и плавно,
+  // но быстро приближаем текущую скорость к этой цели — отзывчиво и точно.
+  const desired = new THREE.Vector3();
+  const boosting = keys['ShiftLeft'] || keys['ShiftRight'];
+  const speed = boosting ? FLY_BOOST : FLY_SPEED;
 
-  // лёгкая гравитация в полёте, чтобы был «дрейф» вниз без управления
-  state.vel.y -= 14 * dt;
+  // W/S — вперёд/назад ТУДА, КУДА СМОТРИШЬ (с учётом наклона взгляда)
+  if (keys['KeyW']) desired.add(forward);
+  if (keys['KeyS']) desired.sub(forward);
+  // A/D — боковое смещение
+  if (keys['KeyD']) desired.add(right);
+  if (keys['KeyA']) desired.sub(right);
 
-  // демпфирование (воздушное сопротивление)
-  const damp = Math.pow(FLY_DAMP, dt * 60);
-  state.vel.multiplyScalar(damp);
+  if (desired.lengthSq() > 0) desired.normalize().multiplyScalar(speed);
 
-  // ограничение скорости
-  const sp = state.vel.length();
-  if (sp > FLY_MAX) state.vel.multiplyScalar(FLY_MAX / sp);
+  // Вертикаль — отдельный точный контроль (накладывается поверх)
+  let vy = 0;
+  if (keys['Space']) vy += VERT_SPEED;
+  if (keys['KeyC'] || keys['ControlLeft'] || keys['ControlRight']) vy -= VERT_SPEED;
+  desired.y += vy;
+
+  // Плавно-резкий отклик (экспоненциальное сглаживание, не зависит от FPS).
+  // Отпустил клавиши -> цель = 0 -> Паук мягко зависает на месте.
+  const t = 1 - Math.exp(-FLY_RESPONSE * dt);
+  state.vel.lerp(desired, t);
 }
 
 function swingUpdate(dt) {
@@ -644,7 +649,17 @@ function orientHero(dt) {
   const pos = player.position;
   tmpM.lookAt(new THREE.Vector3(0,0,0), lookDir.clone().negate(), upVec);
   const targetQ = new THREE.Quaternion().setFromRotationMatrix(tmpM);
-  hero.quaternion.slerp(targetQ, 1 - Math.pow(0.001, dt));
+
+  // крен (банкинг) при боковом движении — смотрится «классно»
+  if (state.mode === 'fly') {
+    let bank = 0;
+    if (keys['KeyA']) bank += 0.5;
+    if (keys['KeyD']) bank -= 0.5;
+    const rollQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), bank);
+    targetQ.multiply(rollQ);
+  }
+
+  hero.quaternion.slerp(targetQ, 1 - Math.exp(-10 * dt));
 
   // покачивание конечностей
   bob += dt * (4 + speed * 0.05);
@@ -677,23 +692,30 @@ function updateWebVisual() {
 }
 
 function updateCamera(dt) {
-  // камера-преследователь сзади-сверху относительно yaw/pitch
+  // Камера-преследователь сзади-сверху, точно за направлением взгляда.
   const back = forward.clone().multiplyScalar(-1);
-  const dist = 18;
+  const dist = 16;
   const desired = player.position.clone()
     .addScaledVector(back, dist)
-    .add(new THREE.Vector3(0, 6, 0));
+    .add(new THREE.Vector3(0, 5.5, 0));
 
   // не давать камере уходить под землю
   if (desired.y < 4) desired.y = 4;
 
-  camPos.lerp(desired, 1 - Math.pow(0.0001, dt));
-  // при первом кадре установить сразу
+  // Резкое, но плавное следование (экспоненциальное сглаживание).
+  const t = 1 - Math.exp(-12 * dt);
+  camPos.lerp(desired, t);
   if (!camera.userData.init) { camPos.copy(desired); camera.userData.init = true; }
   camera.position.copy(camPos);
 
-  camTarget.copy(player.position).addScaledVector(forward, 8).add(new THREE.Vector3(0, 1.5, 0));
+  camTarget.copy(player.position).addScaledVector(forward, 10).add(new THREE.Vector3(0, 1.2, 0));
   camera.lookAt(camTarget);
+
+  // Эффект скорости: чем быстрее летим — тем шире угол обзора.
+  const sp = state.vel.length();
+  const targetFov = 70 + Math.min(26, sp * 0.13);
+  camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-6 * dt));
+  camera.updateProjectionMatrix();
 }
 
 const speedEl = document.getElementById('speedVal');
