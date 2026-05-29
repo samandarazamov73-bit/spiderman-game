@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Человек-Паук 3D — Полёт над городом</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0e1a; font-family: "Segoe UI", Arial, sans-serif; }
+  #game { position: fixed; inset: 0; display: block; }
+
+  /* HUD */
+  #hud {
+    position: fixed; inset: 0; pointer-events: none; color: #fff;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+  }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    transform: translate(-50%, -50%);
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: rgba(255,255,255,0.85);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+
+  #speedo {
+    position: absolute; left: 24px; bottom: 24px;
+    background: rgba(10, 14, 30, 0.55); border: 1px solid rgba(120,160,255,0.35);
+    border-radius: 14px; padding: 14px 18px; min-width: 180px;
+    backdrop-filter: blur(6px);
+  }
+  #speedo .label { font-size: 12px; letter-spacing: 1px; opacity: 0.7; text-transform: uppercase; }
+  #speedo .val { font-size: 30px; font-weight: 700; color: #6fd1ff; }
+  #speedo .unit { font-size: 13px; opacity: 0.7; }
+  #speedo .mode { margin-top: 6px; font-size: 13px; }
+  #speedo .mode b { color: #ff5b6e; }
+
+  #help {
+    position: absolute; right: 24px; top: 24px;
+    background: rgba(10, 14, 30, 0.55); border: 1px solid rgba(120,160,255,0.35);
+    border-radius: 14px; padding: 16px 20px; max-width: 280px; line-height: 1.7;
+    font-size: 13px; backdrop-filter: blur(6px); transition: opacity .4s;
+  }
+  #help h2 { font-size: 15px; margin-bottom: 8px; color: #ff5b6e; letter-spacing: .5px; }
+  #help kbd {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 5px; padding: 1px 7px; font-family: monospace; font-size: 12px;
+  }
+
+  #start {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 30%, #1a2444, #060812 75%);
+    z-index: 10; text-align: center; flex-direction: column; color: #fff;
+  }
+  #start h1 {
+    font-size: 52px; letter-spacing: 2px; margin-bottom: 6px;
+    background: linear-gradient(90deg, #ff3a55, #ff7e8f, #6fd1ff);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 4px 16px rgba(255,60,90,0.35));
+  }
+  #start p { opacity: 0.8; margin-bottom: 26px; font-size: 16px; }
+  #start .ctrls { font-size: 14px; line-height: 2; opacity: 0.85; margin-bottom: 30px; }
+  #start .ctrls kbd {
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 5px; padding: 2px 9px; font-family: monospace; margin: 0 2px;
+  }
+  #playBtn {
+    pointer-events: auto; cursor: pointer; border: none; color: #fff; font-size: 19px; font-weight: 700;
+    padding: 16px 54px; border-radius: 40px; letter-spacing: 1px;
+    background: linear-gradient(90deg, #ff2e4d, #ff6b81);
+    box-shadow: 0 10px 30px rgba(255,46,77,0.45); transition: transform .15s, box-shadow .15s;
+  }
+  #playBtn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 14px 38px rgba(255,46,77,0.6); }
+  .hidden { opacity: 0; pointer-events: none !important; }
+  #loading { position: fixed; inset: 0; display:flex; align-items:center; justify-content:center; color:#6fd1ff; z-index: 20; background:#060812; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+  <div id="speedo">
+    <div class="label">Скорость</div>
+    <div><span class="val" id="speedVal">0</span> <span class="unit">км/ч</span></div>
+    <div class="mode">Режим: <b id="modeVal">ПОЛЁТ</b></div>
+  </div>
+  <div id="help">
+    <h2>УПРАВЛЕНИЕ</h2>
+    <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — движение</div>
+    <div><kbd>Мышь</kbd> — осмотр / прицел</div>
+    <div><kbd>Пробел</kbd> — взлёт / подъём</div>
+    <div><kbd>Shift</kbd> — снижение</div>
+    <div><kbd>ЛКМ</kbd> — выстрелить паутиной</div>
+    <div><kbd>F</kbd> — переключить полёт / паутина</div>
+    <div><kbd>H</kbd> — скрыть подсказку</div>
+  </div>
+</div>
+
+<div id="start">
+  <h1>ЧЕЛОВЕК-ПАУК 3D</h1>
+  <p>Летай и раскачивайся на паутине над городом</p>
+  <div class="ctrls">
+    <div><kbd>W A S D</kbd> движение &nbsp;•&nbsp; <kbd>Мышь</kbd> обзор &nbsp;•&nbsp; <kbd>Пробел</kbd> вверх</div>
+    <div><kbd>ЛКМ</kbd> паутина &nbsp;•&nbsp; <kbd>F</kbd> режим полёта &nbsp;•&nbsp; <kbd>Shift</kbd> вниз</div>
+  </div>
+  <button id="playBtn">ИГРАТЬ</button>
+</div>
+
+<div id="loading">Загрузка движка…</div>
+
+<script type="module">
+// Загружаем 3D-движок Three.js с несколькими запасными CDN (на случай блокировки одного из них)
+const THREE = await (async () => {
+  const sources = [
+    'https://unpkg.com/three@0.160.0/build/three.module.js',
+    'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
+    'https://esm.sh/three@0.160.0',
+    'https://cdn.skypack.dev/three@0.160.0'
+  ];
+  for (const src of sources) {
+    try { return await import(src); }
+    catch (e) { console.warn('Не удалось загрузить Three.js с', src, e); }
+  }
+  const l = document.getElementById('loading');
+  l.style.display = 'flex';
+  l.style.color = '#ff6b81';
+  l.innerHTML = 'Не удалось загрузить 3D-движок Three.js.<br>Проверьте подключение к интернету и обновите страницу.';
+  throw new Error('Three.js failed to load from all CDNs');
+})();
+
+// ----------------------------------------------------------------------------
+//  Базовая сцена
+// ----------------------------------------------------------------------------
+const canvas = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fc4e8);
+scene.fog = new THREE.Fog(0x9fc4e8, 220, 620);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(0, 60, 120);
+
+// ----------------------------------------------------------------------------
+//  Свет
+// ----------------------------------------------------------------------------
+const hemi = new THREE.HemisphereLight(0xbfdcff, 0x46506b, 0.85);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff2d6, 1.25);
+sun.position.set(180, 280, 120);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 10;
+sun.shadow.camera.far = 800;
+const sc = 360;
+sun.shadow.camera.left = -sc; sun.shadow.camera.right = sc;
+sun.shadow.camera.top = sc; sun.shadow.camera.bottom = -sc;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+// ----------------------------------------------------------------------------
+//  Земля + дороги
+// ----------------------------------------------------------------------------
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x3a3f4b, roughness: 1 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Сетка улиц
+const GRID = 9;           // кол-во кварталов в ряд
+const BLOCK = 70;         // размер квартала
+const ROAD = 22;          // ширина дороги
+const STEP = BLOCK + ROAD;
+const HALF = (GRID * STEP) / 2;
+
+const roadMat = new THREE.MeshStandardMaterial({ color: 0x23262e, roughness: 1 });
+const lineMat = new THREE.MeshStandardMaterial({ color: 0xc9b765, roughness: 1, emissive: 0x222018 });
+
+// Генерация дорог по сетке
+const roadW = ROAD;
+for (let i = 0; i <= GRID; i++) {
+  const p = -HALF + i * STEP;
+  // вертикальная дорога (вдоль Z)
+  const vr = new THREE.Mesh(new THREE.PlaneGeometry(roadW, GRID * STEP + roadW), roadMat);
+  vr.rotation.x = -Math.PI / 2;
+  vr.position.set(p, 0.04, 0);
+  scene.add(vr);
+  // горизонтальная дорога (вдоль X)
+  const hr = new THREE.Mesh(new THREE.PlaneGeometry(GRID * STEP + roadW, roadW), roadMat);
+  hr.rotation.x = -Math.PI / 2;
+  hr.position.set(0, 0.045, p);
+  scene.add(hr);
+  // разметка
+  const vl = new THREE.Mesh(new THREE.PlaneGeometry(0.8, GRID * STEP + roadW), lineMat);
+  vl.rotation.x = -Math.PI / 2; vl.position.set(p, 0.06, 0); scene.add(vl);
+  const hl = new THREE.Mesh(new THREE.PlaneGeometry(GRID * STEP + roadW, 0.8), lineMat);
+  hl.rotation.x = -Math.PI / 2; hl.position.set(0, 0.062, p); scene.add(hl);
+}
+
+// ----------------------------------------------------------------------------
+//  Здания (процедурно)
+// ----------------------------------------------------------------------------
+const buildings = []; // {mesh, box} для столкновений и зацепа паутины
+const buildingMats = [
+  new THREE.MeshStandardMaterial({ color: 0x5b6b86, roughness: 0.85, metalness: 0.15 }),
+  new THREE.MeshStandardMaterial({ color: 0x6e7d97, roughness: 0.8, metalness: 0.2 }),
+  new THREE.MeshStandardMaterial({ color: 0x44506a, roughness: 0.9, metalness: 0.1 }),
+  new THREE.MeshStandardMaterial({ color: 0x7a6f63, roughness: 0.9, metalness: 0.1 }),
+  new THREE.MeshStandardMaterial({ color: 0x8593ab, roughness: 0.7, metalness: 0.25 }),
+];
+const winMat = new THREE.MeshStandardMaterial({
+  color: 0x0c1018, emissive: 0xffe39a, emissiveIntensity: 0.0, roughness: 0.3, metalness: 0.6
+});
+
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+
+function makeBuilding(cx, cz) {
+  // высота и размеры
+  const margin = 8 + Math.random() * 6;
+  const w = BLOCK - margin - Math.random() * 14;
+  const d = BLOCK - margin - Math.random() * 14;
+  const distFromCenter = Math.hypot(cx, cz);
+  const centerBoost = Math.max(0, 1 - distFromCenter / (HALF * 1.1));
+  const h = 28 + Math.random() * 70 + centerBoost * 150;
+
+  const mat = buildingMats[(Math.random() * buildingMats.length) | 0];
+  const b = new THREE.Mesh(boxGeo, mat);
+  b.scale.set(w, h, d);
+  b.position.set(cx, h / 2, cz);
+  b.castShadow = true;
+  b.receiveShadow = true;
+  scene.add(b);
+
+  // окна — тонкая решётка-оболочка (instanced для скорости)
+  addWindows(cx, cz, w, h, d);
+
+  const box = new THREE.Box3(
+    new THREE.Vector3(cx - w / 2, 0, cz - d / 2),
+    new THREE.Vector3(cx + w / 2, h, cz + d / 2)
+  );
+  buildings.push({ mesh: b, box, top: h, x: cx, z: cz, w, d });
+
+  // крыша-деталь
+  if (Math.random() > 0.5) {
+    const rw = w * (0.2 + Math.random() * 0.3);
+    const rh = 6 + Math.random() * 16;
+    const roof = new THREE.Mesh(boxGeo, mat);
+    roof.scale.set(rw, rh, rw);
+    roof.position.set(cx + (Math.random() - 0.5) * w * 0.3, h + rh / 2, cz + (Math.random() - 0.5) * d * 0.3);
+    roof.castShadow = true;
+    scene.add(roof);
+  }
+}
+
+// Окна через InstancedMesh — собираем все окна всех зданий в один меш
+const winData = [];
+function addWindows(cx, cz, w, h, d) {
+  const stepY = 7, stepX = 6;
+  const cols = Math.max(1, Math.floor(w / stepX) - 1);
+  const rows = Math.max(1, Math.floor(h / stepY) - 1);
+  const colsD = Math.max(1, Math.floor(d / stepX) - 1);
+  const winW = 2.6, winH = 3.4;
+  for (let r = 1; r <= rows; r++) {
+    const y = (r * h) / (rows + 1);
+    // фасады по X (front/back)
+    for (let c = 1; c <= cols; c++) {
+      const x = cx - w / 2 + (c * w) / (cols + 1);
+      winData.push({ x, y, z: cz + d / 2 + 0.1, ry: 0, w: winW, h: winH });
+      winData.push({ x, y, z: cz - d / 2 - 0.1, ry: Math.PI, w: winW, h: winH });
+    }
+    // фасады по Z (left/right)
+    for (let c = 1; c <= colsD; c++) {
+      const z = cz - d / 2 + (c * d) / (colsD + 1);
+      winData.push({ x: cx + w / 2 + 0.1, y, z, ry: Math.PI / 2, w: winW, h: winH });
+      winData.push({ x: cx - w / 2 - 0.1, y, z, ry: -Math.PI / 2, w: winW, h: winH });
+    }
+  }
+}
+
+// генерируем город
+for (let gx = 0; gx < GRID; gx++) {
+  for (let gz = 0; gz < GRID; gz++) {
+    const cx = -HALF + gx * STEP + STEP / 2;
+    const cz = -HALF + gz * STEP + STEP / 2;
+    // оставим центральную клетку как площадь иногда
+    if (Math.random() < 0.06) continue;
+    makeBuilding(cx, cz);
+  }
+}
+
+// строим instanced окна
+(function buildWindows() {
+  const planeGeo = new THREE.PlaneGeometry(1, 1);
+  const inst = new THREE.InstancedMesh(planeGeo, winMat, winData.length);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const s = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  for (let i = 0; i < winData.length; i++) {
+    const wd = winData[i];
+    e.set(0, wd.ry, 0); q.setFromEuler(e);
+    s.set(wd.w, wd.h, 1);
+    p.set(wd.x, wd.y, wd.z);
+    m.compose(p, q, s);
+    inst.setMatrixAt(i, m);
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  scene.add(inst);
+  window.__windows = inst;
+})();
+
+// несколько деревьев/парков по краям дорог (декор)
+const treeMat = new THREE.MeshStandardMaterial({ color: 0x2f6b3a, roughness: 1 });
+const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3826, roughness: 1 });
+for (let i = 0; i < 60; i++) {
+  const x = (Math.random() - 0.5) * GRID * STEP;
+  const z = (Math.random() - 0.5) * GRID * STEP;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 5, 6), trunkMat);
+  trunk.position.set(x, 2.5, z); trunk.castShadow = true; scene.add(trunk);
+  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2, 0), treeMat);
+  crown.position.set(x, 7, z); crown.castShadow = true; scene.add(crown);
+}
+
+// ----------------------------------------------------------------------------
+//  Человек-Паук (простая модель из примитивов)
+// ----------------------------------------------------------------------------
+const player = new THREE.Group();
+player.position.set(0, 120, 0);
+scene.add(player);
+
+const spideyRed = new THREE.MeshStandardMaterial({ color: 0xd11f2d, roughness: 0.5 });
+const spideyBlue = new THREE.MeshStandardMaterial({ color: 0x1d2f8f, roughness: 0.5 });
+const spideyEye = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5 });
+
+const hero = new THREE.Group();
+player.add(hero);
+
+// тело
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(1.0, 1.6, 6, 12), spideyRed);
+torso.position.y = 0; torso.castShadow = true; hero.add(torso);
+// таз/ноги (синие)
+const hips = new THREE.Mesh(new THREE.CapsuleGeometry(0.9, 0.6, 4, 10), spideyBlue);
+hips.position.y = -1.6; hips.castShadow = true; hero.add(hips);
+
+function makeLimb(mat, r, len) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 8), mat);
+  m.position.y = -len / 2; m.castShadow = true;
+  g.add(m);
+  return g;
+}
+// руки
+const armL = makeLimb(spideyRed, 0.38, 1.8); armL.position.set(-1.1, 0.7, 0); hero.add(armL);
+const armR = makeLimb(spideyRed, 0.38, 1.8); armR.position.set(1.1, 0.7, 0); hero.add(armR);
+// ноги
+const legL = makeLimb(spideyBlue, 0.45, 2.0); legL.position.set(-0.5, -2.0, 0); hero.add(legL);
+const legR = makeLimb(spideyBlue, 0.45, 2.0); legR.position.set(0.5, -2.0, 0); hero.add(legR);
+// голова
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 16), spideyRed);
+head.position.y = 1.9; head.castShadow = true; hero.add(head);
+// глаза
+const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 10), spideyEye);
+eyeL.scale.set(1, 0.6, 0.5); eyeL.position.set(-0.32, 2.0, 0.62); hero.add(eyeL);
+const eyeR = eyeL.clone(); eyeR.position.x = 0.32; hero.add(eyeR);
+
+// логотип-паук на груди (маленькая чёрная точка-крест)
+const spiderMark = new THREE.Mesh(new THREE.CircleGeometry(0.25, 8), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+spiderMark.position.set(0, 0.2, 1.0); hero.add(spiderMark);
+
+hero.scale.set(1.1, 1.1, 1.1);
+
+// ----------------------------------------------------------------------------
+//  Паутина (линия от руки к точке зацепа)
+// ----------------------------------------------------------------------------
+const webMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+const webGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const webLine = new THREE.Line(webGeo, webMat);
+webLine.visible = false;
+scene.add(webLine);
+
+// небольшой "паутинный" эффект при выстреле
+const webDotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const webAnchor = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 8), webDotMat);
+webAnchor.visible = false;
+scene.add(webAnchor);
+
+// ----------------------------------------------------------------------------
+//  Управление и физика
+// ----------------------------------------------------------------------------
+const keys = {};
+let yaw = 0, pitch = -0.15;
+let pointerLocked = false;
+
+const state = {
+  vel: new THREE.Vector3(),
+  mode: 'fly',        // 'fly' или 'swing'
+  attached: false,    // прицеплен ли паутиной
+  anchor: new THREE.Vector3(),
+  ropeLen: 0,
+  onGround: false,
+};
+
+const GRAV = 60;
+const FLY_ACCEL = 130;
+const FLY_MAX = 140;
+const FLY_DAMP = 0.92;
+const SWING_PUMP = 36;
+
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyF') toggleMode();
+  if (e.code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
+  if (e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+canvas.addEventListener('click', () => {
+  if (!pointerLocked && started) canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = document.pointerLockElement === canvas;
+});
+addEventListener('mousemove', e => {
+  if (!pointerLocked) return;
+  yaw   -= e.movementX * 0.0022;
+  pitch -= e.movementY * 0.0022;
+  pitch = Math.max(-1.45, Math.min(1.45, pitch));
+});
+addEventListener('mousedown', e => {
+  if (e.button === 0 && pointerLocked) shootWeb();
+});
+addEventListener('mouseup', e => {
+  if (e.button === 0) releaseWeb();
+});
+
+function toggleMode() {
+  state.mode = state.mode === 'fly' ? 'swing' : 'fly';
+  if (state.mode === 'fly') releaseWeb();
+  document.getElementById('modeVal').textContent = state.mode === 'fly' ? 'ПОЛЁТ' : 'ПАУТИНА';
+}
+
+// направление взгляда
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+function updateDirs() {
+  forward.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+  forward.normalize();
+  right.set(Math.sin(yaw - Math.PI / 2), 0, Math.cos(yaw - Math.PI / 2)).normalize();
+}
+
+// --- Паутина: луч из позиции игрока по направлению взгляда, ищем точку на здании
+const raycaster = new THREE.Raycaster();
+function shootWeb() {
+  updateDirs();
+  // Цепляемся за ближайшую крышу/стену в направлении взгляда (с уклоном вверх)
+  const origin = player.position.clone();
+  const dir = forward.clone();
+  // немного поднимем прицел вверх для удобного зацепа
+  dir.y += 0.25; dir.normalize();
+  raycaster.set(origin, dir);
+  raycaster.far = 260;
+  const meshes = buildings.map(b => b.mesh);
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (hits.length > 0) {
+    const p = hits[0].point.clone();
+    attachWeb(p);
+  } else {
+    // если не попали в здание — цепляемся за виртуальную точку высоко впереди
+    const p = origin.clone().add(dir.multiplyScalar(120));
+    p.y = Math.max(p.y, origin.y + 40);
+    attachWeb(p);
+  }
+}
+function attachWeb(point) {
+  state.attached = true;
+  state.mode = 'swing';
+  document.getElementById('modeVal').textContent = 'ПАУТИНА';
+  state.anchor.copy(point);
+  state.ropeLen = player.position.distanceTo(point) * 0.92;
+  webLine.visible = true;
+  webAnchor.visible = true;
+  webAnchor.position.copy(point);
+}
+function releaseWeb() {
+  state.attached = false;
+  webLine.visible = false;
+  webAnchor.visible = false;
+}
+
+// ----------------------------------------------------------------------------
+//  Столкновения со зданиями (грубо: AABB push-out)
+// ----------------------------------------------------------------------------
+const PLAYER_R = 2.2;
+function resolveCollisions(pos) {
+  for (const b of buildings) {
+    const minX = b.box.min.x - PLAYER_R, maxX = b.box.max.x + PLAYER_R;
+    const minZ = b.box.min.z - PLAYER_R, maxZ = b.box.max.z + PLAYER_R;
+    const maxY = b.box.max.y + PLAYER_R;
+    if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ && pos.y < maxY) {
+      // найдём минимальное выталкивание
+      const dxMin = pos.x - minX, dxMax = maxX - pos.x;
+      const dzMin = pos.z - minZ, dzMax = maxZ - pos.z;
+      const dyTop = maxY - pos.y;
+      const m = Math.min(dxMin, dxMax, dzMin, dzMax, dyTop);
+      if (m === dyTop) { pos.y = maxY; if (state.vel.y < 0) state.vel.y = 0; state.onGround = true; }
+      else if (m === dxMin) { pos.x = minX; state.vel.x = 0; }
+      else if (m === dxMax) { pos.x = maxX; state.vel.x = 0; }
+      else if (m === dzMin) { pos.z = minZ; state.vel.z = 0; }
+      else { pos.z = maxZ; state.vel.z = 0; }
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+//  Цикл
+// ----------------------------------------------------------------------------
+let started = false;
+const clock = new THREE.Clock();
+const camPos = new THREE.Vector3();
+const camTarget = new THREE.Vector3();
+let bob = 0;
+
+function update(dt) {
+  updateDirs();
+  state.onGround = false;
+
+  if (state.mode === 'fly') {
+    flyUpdate(dt);
+  } else {
+    swingUpdate(dt);
+  }
+
+  // ограничение скорости падения
+  if (state.vel.y < -200) state.vel.y = -200;
+
+  // применяем скорость
+  player.position.addScaledVector(state.vel, dt);
+
+  // земля
+  if (player.position.y < 3) {
+    player.position.y = 3;
+    if (state.vel.y < 0) state.vel.y = 0;
+    state.onGround = true;
+    state.vel.x *= 0.8; state.vel.z *= 0.8;
+  }
+  // столкновения со зданиями
+  resolveCollisions(player.position);
+
+  // граница мира
+  const L = HALF + 60;
+  player.position.x = Math.max(-L, Math.min(L, player.position.x));
+  player.position.z = Math.max(-L, Math.min(L, player.position.z));
+
+  orientHero(dt);
+  updateWebVisual();
+  updateCamera(dt);
+  updateHUD();
+}
+
+function flyUpdate(dt) {
+  const accel = new THREE.Vector3();
+  if (keys['KeyW']) accel.add(forward);
+  if (keys['KeyS']) accel.sub(forward);
+  if (keys['KeyD']) accel.add(right);
+  if (keys['KeyA']) accel.sub(right);
+  if (accel.lengthSq() > 0) {
+    accel.normalize().multiplyScalar(FLY_ACCEL);
+    state.vel.addScaledVector(accel, dt);
+  }
+  // вертикаль
+  if (keys['Space']) state.vel.y += FLY_ACCEL * dt;
+  if (keys['ShiftLeft'] || keys['ShiftRight']) state.vel.y -= FLY_ACCEL * dt;
+
+  // лёгкая гравитация в полёте, чтобы был «дрейф» вниз без управления
+  state.vel.y -= 14 * dt;
+
+  // демпфирование (воздушное сопротивление)
+  const damp = Math.pow(FLY_DAMP, dt * 60);
+  state.vel.multiplyScalar(damp);
+
+  // ограничение скорости
+  const sp = state.vel.length();
+  if (sp > FLY_MAX) state.vel.multiplyScalar(FLY_MAX / sp);
+}
+
+function swingUpdate(dt) {
+  // гравитация
+  state.vel.y -= GRAV * dt;
+
+  // «подкачка» — управление во время раскачивания
+  const accel = new THREE.Vector3();
+  if (keys['KeyW']) accel.add(forward);
+  if (keys['KeyS']) accel.sub(forward);
+  if (keys['KeyD']) accel.add(right);
+  if (keys['KeyA']) accel.sub(right);
+  if (accel.lengthSq() > 0) {
+    accel.normalize().multiplyScalar(SWING_PUMP);
+    state.vel.addScaledVector(accel, dt);
+  }
+
+  if (state.attached) {
+    // ограничение длины верёвки (маятник): если дальше ropeLen — притягиваем и убираем радиальную скорость
+    const toAnchor = new THREE.Vector3().subVectors(state.anchor, player.position);
+    const dist = toAnchor.length();
+    if (dist > state.ropeLen) {
+      const n = toAnchor.clone().multiplyScalar(1 / dist); // направление к якорю
+      // переставляем на сферу
+      const correction = dist - state.ropeLen;
+      player.position.addScaledVector(n, correction);
+      // убираем компоненту скорости, направленную от якоря (натяжение)
+      const radialSpeed = state.vel.dot(n);
+      if (radialSpeed < 0) state.vel.addScaledVector(n, -radialSpeed);
+    }
+    // постепенно укорачиваем верёвку при Space (подтягивание вверх)
+    if (keys['Space']) state.ropeLen = Math.max(12, state.ropeLen - 50 * dt);
+    if (keys['ShiftLeft'] || keys['ShiftRight']) state.ropeLen += 50 * dt;
+  }
+
+  // небольшое сопротивление
+  state.vel.multiplyScalar(Math.pow(0.995, dt * 60));
+}
+
+// ориентация героя — вдоль скорости, с лёгким покачиванием конечностей
+const heroQuat = new THREE.Quaternion();
+const upVec = new THREE.Vector3(0, 1, 0);
+const tmpM = new THREE.Matrix4();
+function orientHero(dt) {
+  const v = state.vel;
+  const speed = v.length();
+  let lookDir;
+  if (speed > 4) lookDir = v.clone().normalize();
+  else lookDir = forward.clone();
+
+  // герой смотрит в направлении движения, "ныряя" вперёд
+  const pos = player.position;
+  tmpM.lookAt(new THREE.Vector3(0,0,0), lookDir.clone().negate(), upVec);
+  const targetQ = new THREE.Quaternion().setFromRotationMatrix(tmpM);
+  hero.quaternion.slerp(targetQ, 1 - Math.pow(0.001, dt));
+
+  // покачивание конечностей
+  bob += dt * (4 + speed * 0.05);
+  const sw = Math.sin(bob) * 0.5;
+  const sw2 = Math.cos(bob) * 0.5;
+  if (state.mode === 'swing') {
+    // руки вверх к паутине
+    armL.rotation.x = -2.4 + sw * 0.2;
+    armR.rotation.x = -2.4 + sw2 * 0.2;
+    legL.rotation.x = 0.4 + sw * 0.6;
+    legR.rotation.x = 0.4 - sw * 0.6;
+  } else {
+    // супергеройская поза полёта
+    armL.rotation.x = -2.2; armR.rotation.x = 0.3;
+    armL.rotation.z = 0.2; armR.rotation.z = -0.2;
+    legL.rotation.x = 0.15 + sw * 0.3;
+    legR.rotation.x = 0.15 - sw * 0.3;
+  }
+}
+
+const handWorld = new THREE.Vector3();
+function updateWebVisual() {
+  if (!state.attached) return;
+  // рука (правая) в мире
+  armR.getWorldPosition(handWorld);
+  const pts = webLine.geometry.attributes.position;
+  pts.setXYZ(0, handWorld.x, handWorld.y, handWorld.z);
+  pts.setXYZ(1, state.anchor.x, state.anchor.y, state.anchor.z);
+  pts.needsUpdate = true;
+}
+
+function updateCamera(dt) {
+  // камера-преследователь сзади-сверху относительно yaw/pitch
+  const back = forward.clone().multiplyScalar(-1);
+  const dist = 18;
+  const desired = player.position.clone()
+    .addScaledVector(back, dist)
+    .add(new THREE.Vector3(0, 6, 0));
+
+  // не давать камере уходить под землю
+  if (desired.y < 4) desired.y = 4;
+
+  camPos.lerp(desired, 1 - Math.pow(0.0001, dt));
+  // при первом кадре установить сразу
+  if (!camera.userData.init) { camPos.copy(desired); camera.userData.init = true; }
+  camera.position.copy(camPos);
+
+  camTarget.copy(player.position).addScaledVector(forward, 8).add(new THREE.Vector3(0, 1.5, 0));
+  camera.lookAt(camTarget);
+}
+
+const speedEl = document.getElementById('speedVal');
+function updateHUD() {
+  const kmh = Math.round(state.vel.length() * 3.6 * 2.2); // условный множитель «эффектности»
+  speedEl.textContent = kmh;
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (started) update(dt);
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ----------------------------------------------------------------------------
+//  Старт
+// ----------------------------------------------------------------------------
+document.getElementById('loading').style.display = 'none';
+document.getElementById('playBtn').addEventListener('click', () => {
+  started = true;
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('modeVal').textContent = 'ПОЛЁТ';
+  canvas.requestPointerLock();
+});
+
+loop();
+</script>
+</body>
+</html>
