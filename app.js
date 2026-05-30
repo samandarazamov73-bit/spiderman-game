@@ -91,8 +91,8 @@ const state = {
   bevelSegments: 6,
   // Inner (chiseled) bevel: a separate raised ridge on the front face.
   innerBevel: false,
-  innerBevelHeight: 0.06,
-  innerBevelInset: 0.05,
+  innerBevelHeight: 0.08,
+  innerBevelInset: 0.18,
   innerBevelSegments: 1, // 1 = sharp pyramid edge
   color: '#e8e6e3',
   roughness: 0.25,
@@ -237,15 +237,18 @@ function updateText() {
   const safeText = state.text && state.text.length > 0 ? state.text : ' ';
 
   // 1) MAIN BODY
+  // When the chiseled inner bevel is on, render the body as a clean prism
+  // (no front bevel) so the chiseled cap can sit flush on its front face.
+  const useBodyBevel = state.bevelEnabled && !state.innerBevel;
   const body = new TextGeometry(safeText, {
     font: currentFont,
     size: state.size,
     depth: state.depth,
     curveSegments: state.curveSegments,
-    bevelEnabled: state.bevelEnabled,
-    bevelThickness: state.bevelEnabled ? state.bevelThickness : 0,
-    bevelSize: state.bevelEnabled ? state.bevelSize : 0,
-    bevelOffset: state.bevelEnabled ? state.bevelOffset : 0,
+    bevelEnabled: useBodyBevel,
+    bevelThickness: useBodyBevel ? state.bevelThickness : 0,
+    bevelSize: useBodyBevel ? state.bevelSize : 0,
+    bevelOffset: useBodyBevel ? state.bevelOffset : 0,
     bevelSegments: state.bevelSegments,
   });
   body.computeBoundingBox();
@@ -528,12 +531,26 @@ function buildPanel() {
       b.appendChild(makeSlider('Bevel Segments', 'bevelSegments', 1, 16, 1, true));
     }
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
-    b.appendChild(makeToggle('Inner Bevel', 'innerBevel', 'Sharp chiseled ridge on the front face'));
+    b.appendChild(makeToggle('Inner Bevel', 'innerBevel', 'Граненая поверхность (огранка / резьба)'));
     if (state.innerBevel) {
-      b.appendChild(makeSlider('Ridge Height', 'innerBevelHeight', 0.005, 0.25, 0.005));
-      b.appendChild(makeSlider('Ridge Inset', 'innerBevelInset', 0.005, 0.15, 0.005));
+      b.appendChild(makeSlider('Ridge Height', 'innerBevelHeight', 0.005, 0.4, 0.005));
+      b.appendChild(makeSlider('Ridge Inset', 'innerBevelInset', 0.005, 0.5, 0.005));
       b.appendChild(makeSlider('Sharpness', 'innerBevelSegments', 1, 8, 1, true));
-      b.appendChild(el('p', { class: 'hint' }, ['Sharpness = 1 → острый гребень. Больше = округлый.']));
+      b.appendChild(el('p', { class: 'hint' }, [
+        'Увеличивай Ridge Inset, пока пирамидки не сойдутся острым хребтом по центру ножки буквы. Для жирных шрифтов нужны большие значения.',
+      ]));
+      const chiselBtn = el('button', { class: 'btn-secondary', type: 'button' }, ['Chisel It (preset)']);
+      chiselBtn.addEventListener('click', () => {
+        Object.assign(state, {
+          innerBevelHeight: 0.08,
+          innerBevelInset: 0.18,
+          innerBevelSegments: 1,
+          bevelEnabled: false,
+        });
+        buildPanel();
+        updateText();
+      });
+      b.appendChild(chiselBtn);
     }
   }));
 
@@ -709,7 +726,7 @@ function resetAll() {
     fontId: state.customFont ? state.fontId : 'helvetiker-bold',
     size: 1, depth: 0.4, curveSegments: 12,
     bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.02, bevelOffset: 0, bevelSegments: 6,
-    innerBevel: false, innerBevelHeight: 0.06, innerBevelInset: 0.05, innerBevelSegments: 1,
+    innerBevel: false, innerBevelHeight: 0.08, innerBevelInset: 0.18, innerBevelSegments: 1,
     color: '#e8e6e3', roughness: 0.25, metalness: 0.4,
     clearcoat: 0.6, clearcoatRoughness: 0.15, reflectivity: 0.6,
     background: '#0e1014', envPreset: 'studio', envIntensity: 0.9, showShadows: true,
