@@ -103,6 +103,14 @@
       <div id="hudText" class="hud-chip font-mono">"Kiro"</div>
     </div>
 
+    <!-- Stats overlay -->
+    <div id="statsOverlay" class="absolute top-12 right-3 flex flex-col gap-1 px-3 py-2 bg-ink-800/80 backdrop-blur border border-ink-400/20 rounded-md text-[10px] text-ink-100 font-mono pointer-events-none" style="display:none">
+      <div class="flex justify-between gap-3"><span class="text-ink-200">FPS</span><span id="soFps">—</span></div>
+      <div class="flex justify-between gap-3"><span class="text-ink-200">Triangles</span><span id="soTris">—</span></div>
+      <div class="flex justify-between gap-3"><span class="text-ink-200">Vertices</span><span id="soVerts">—</span></div>
+      <div class="flex justify-between gap-3"><span class="text-ink-200">Draw calls</span><span id="soCalls">—</span></div>
+    </div>
+
     <!-- Floating viewport controls -->
     <div class="absolute bottom-3 left-3 flex items-center gap-1.5">
       <button id="autoRotateBtn" class="float-btn" title="Click to cycle animation modes">
