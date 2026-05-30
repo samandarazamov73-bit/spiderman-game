@@ -38,6 +38,43 @@ const MATERIAL_PRESETS = [
 
 const BG_PRESETS = ['#0a0a0d', '#0e1014', '#1a1f2e', '#2c1b3a', '#f4f4f5', '#e8e6e3', '#5b21b6', '#0ea5e9'];
 
+// Animation presets. Each defines how to transform the text group per frame.
+// `t` is elapsed time × state.animationSpeed; `g` is the text group.
+const ANIMATIONS = [
+  { id: 'none',     name: 'None',           apply: null },
+  { id: 'spinY',    name: 'Spin Y',         apply: (g, t) => { g.rotation.y =  t; } },
+  { id: 'spinYRev', name: 'Spin Y Reverse', apply: (g, t) => { g.rotation.y = -t; } },
+  { id: 'spinX',    name: 'Spin X',         apply: (g, t) => { g.rotation.x =  t * 0.8; } },
+  { id: 'spinZ',    name: 'Spin Z',         apply: (g, t) => { g.rotation.z =  t * 0.6; } },
+  { id: 'tumble',   name: 'Tumble (XYZ)',   apply: (g, t) => {
+      g.rotation.x = t * 0.7;
+      g.rotation.y = t;
+      g.rotation.z = t * 0.4;
+  } },
+  { id: 'wobble',   name: 'Wobble',         apply: (g, t) => {
+      g.rotation.x = Math.sin(t * 1.4) * 0.28;
+      g.rotation.z = Math.cos(t * 1.0) * 0.20;
+      g.rotation.y = Math.sin(t * 0.6) * 0.45;
+  } },
+  { id: 'pendulum', name: 'Pendulum',       apply: (g, t) => {
+      g.rotation.y = Math.sin(t * 1.6) * 0.9;
+  } },
+  { id: 'float',    name: 'Float',          apply: (g, t) => {
+      g.position.y = Math.sin(t * 1.5) * 0.18;
+      g.rotation.y = Math.sin(t * 0.6) * 0.30;
+      g.rotation.z = Math.sin(t * 1.2) * 0.06;
+  } },
+  { id: 'figure8',  name: 'Figure 8',       apply: (g, t) => {
+      g.rotation.y = Math.sin(t)        * 0.7;
+      g.rotation.x = Math.sin(t * 2)    * 0.35;
+  } },
+  { id: 'shimmy',   name: 'Shimmy',         apply: (g, t) => {
+      g.rotation.z = Math.sin(t * 6)    * 0.08;
+      g.position.x = Math.sin(t * 6)    * 0.05;
+  } },
+  { id: 'orbit',    name: 'Orbit Camera',   apply: null /* handled by OrbitControls.autoRotate */ },
+];
+
 // ============ STATE ============
 const state = {
   text: 'Kiro',
@@ -50,6 +87,7 @@ const state = {
   bevelEnabled: true,
   bevelThickness: 0.04,
   bevelSize: 0.02,
+  bevelOffset: 0,
   bevelSegments: 6,
   color: '#e8e6e3',
   roughness: 0.25,
@@ -61,8 +99,8 @@ const state = {
   envPreset: 'studio',
   envIntensity: 0.9,
   showShadows: true,
-  autoRotate: false,
-  autoRotateSpeed: 1.2,
+  animationMode: 'none',
+  animationSpeed: 1.0,
 };
 
 // ============ SCENE SETUP ============
@@ -197,7 +235,7 @@ function updateText() {
     bevelEnabled: state.bevelEnabled,
     bevelThickness: state.bevelEnabled ? state.bevelThickness : 0,
     bevelSize: state.bevelEnabled ? state.bevelSize : 0,
-    bevelOffset: 0,
+    bevelOffset: state.bevelEnabled ? state.bevelOffset : 0,
     bevelSegments: state.bevelSegments,
   });
   geom.computeBoundingBox();
@@ -443,6 +481,8 @@ function buildPanel() {
     if (state.bevelEnabled) {
       b.appendChild(makeSlider('Bevel Thickness', 'bevelThickness', 0, 0.3, 0.005));
       b.appendChild(makeSlider('Bevel Size', 'bevelSize', 0, 0.2, 0.005));
+      b.appendChild(makeSlider('Bevel Offset', 'bevelOffset', -0.15, 0.15, 0.005));
+      b.appendChild(el('p', { class: 'hint' }, ['Negative offset = inner bevel (engraved look)']));
       b.appendChild(makeSlider('Bevel Segments', 'bevelSegments', 1, 16, 1, true));
     }
   }));
@@ -493,8 +533,31 @@ function buildPanel() {
 
   // ========== ANIMATION ==========
   panel.appendChild(makeSection('animation', 'Animation', '↻', (b) => {
-    b.appendChild(makeToggle('Auto Rotate', 'autoRotate', 'Spin on Y-axis'));
-    if (state.autoRotate) b.appendChild(makeSlider('Speed', 'autoRotateSpeed', 0.1, 5, 0.1));
+    b.appendChild(makeSelect(
+      'Mode',
+      'animationMode',
+      ANIMATIONS.map((a) => ({ value: a.id, label: a.name }))
+    ));
+    if (state.animationMode !== 'none') {
+      b.appendChild(makeSlider('Speed', 'animationSpeed', 0.05, 5, 0.05));
+    }
+
+    // Quick-pick grid of animation chips.
+    const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr 1fr;' });
+    ANIMATIONS.forEach((a) => {
+      const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center; padding:6px 4px;' });
+      btn.style.background = state.animationMode === a.id ? 'rgba(99,102,241,0.18)' : '';
+      btn.style.color = state.animationMode === a.id ? '#a5a7f5' : '';
+      btn.textContent = a.name;
+      btn.addEventListener('click', () => {
+        state.animationMode = a.id;
+        buildPanel();
+        handleChange('animationMode');
+      });
+      grid.appendChild(btn);
+    });
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider pt-2' }, ['Quick pick']));
+    b.appendChild(grid);
   }));
 
   // ========== EXPORT ==========
@@ -510,7 +573,7 @@ function buildPanel() {
 }
 
 // ============ STATE CHANGE DISPATCH ============
-const GEOMETRY_KEYS = new Set(['text', 'size', 'depth', 'curveSegments', 'bevelEnabled', 'bevelThickness', 'bevelSize', 'bevelSegments']);
+const GEOMETRY_KEYS = new Set(['text', 'size', 'depth', 'curveSegments', 'bevelEnabled', 'bevelThickness', 'bevelSize', 'bevelOffset', 'bevelSegments']);
 const MATERIAL_KEYS = new Set(['color', 'roughness', 'metalness', 'clearcoat', 'clearcoatRoughness', 'reflectivity']);
 
 function handleChange(key) {
@@ -535,12 +598,9 @@ function handleChange(key) {
   if (key === 'envPreset') { loadHDRI(state.envPreset); updateHud(); }
   if (key === 'envIntensity') material.envMapIntensity = state.envIntensity * 1.25;
   if (key === 'showShadows') ground.visible = state.showShadows;
-  if (key === 'autoRotate') {
-    controls.autoRotate = state.autoRotate;
-    document.getElementById('autoRotateBtn').classList.toggle('active', state.autoRotate);
-    buildPanel(); // show/hide speed slider
+  if (key === 'animationMode' || key === 'animationSpeed') {
+    applyAnimationMode();
   }
-  if (key === 'autoRotateSpeed') controls.autoRotateSpeed = state.autoRotateSpeed * 2;
   if (key === 'text') updateHud();
 }
 
@@ -573,19 +633,39 @@ function frameCamera() {
   controls.update();
 }
 
+// Reset transform of the text group (animation modes manipulate it directly).
+function resetTextTransform() {
+  textGroup.rotation.set(0, 0, 0);
+  textGroup.position.set(0, 0, 0);
+}
+
+function applyAnimationMode() {
+  const mode = ANIMATIONS.find((a) => a.id === state.animationMode);
+  // Orbit Camera = OrbitControls.autoRotate; everything else is a per-frame group transform.
+  controls.autoRotate = (mode && mode.id === 'orbit');
+  controls.autoRotateSpeed = state.animationSpeed * 2;
+  resetTextTransform();
+  // Update HUD pill
+  const pill = document.getElementById('autoRotateBtn');
+  pill.classList.toggle('active', state.animationMode !== 'none');
+  pill.querySelector('.anim-label').textContent =
+    state.animationMode === 'none' ? 'Animate' : (mode ? mode.name : '—');
+}
+
 function resetAll() {
   // Reset state to defaults (preserve custom uploaded font reference)
   Object.assign(state, {
     text: 'Kiro',
     fontId: state.customFont ? state.fontId : 'helvetiker-bold',
     size: 1, depth: 0.4, curveSegments: 12,
-    bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.02, bevelSegments: 6,
+    bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.02, bevelOffset: 0, bevelSegments: 6,
     color: '#e8e6e3', roughness: 0.25, metalness: 0.4,
     clearcoat: 0.6, clearcoatRoughness: 0.15, reflectivity: 0.6,
     background: '#0e1014', envPreset: 'studio', envIntensity: 0.9, showShadows: true,
-    autoRotate: false, autoRotateSpeed: 1.2,
+    animationMode: 'none', animationSpeed: 1.0,
   });
   frameCamera();
+  resetTextTransform();
   controls.autoRotate = false;
   document.getElementById('autoRotateBtn').classList.remove('active');
   scene.background = new THREE.Color(state.background);
@@ -600,16 +680,19 @@ function resetAll() {
   buildPanel();
   loadHDRI(state.envPreset);
   setActiveFont().then(updateHud);
+  applyAnimationMode();
 }
 
 document.getElementById('topExportBtn').addEventListener('click', exportPNG);
 document.getElementById('topResetBtn').addEventListener('click', frameCamera);
 document.getElementById('frameBtn').addEventListener('click', frameCamera);
+// Bottom-left pill cycles through animation modes (None → Spin Y → Reverse → ... → Orbit → None).
 document.getElementById('autoRotateBtn').addEventListener('click', () => {
-  state.autoRotate = !state.autoRotate;
-  controls.autoRotate = state.autoRotate;
-  document.getElementById('autoRotateBtn').classList.toggle('active', state.autoRotate);
+  const ids = ANIMATIONS.map((a) => a.id);
+  const i = ids.indexOf(state.animationMode);
+  state.animationMode = ids[(i + 1) % ids.length];
   buildPanel();
+  applyAnimationMode();
 });
 
 // ============ RESIZE ============
@@ -624,9 +707,19 @@ function resize() {
 }
 
 // ============ ANIMATION LOOP ============
+const clock = new THREE.Clock();
+let animTime = 0;
+
 function animate() {
   requestAnimationFrame(animate);
   resize();
+  const dt = clock.getDelta();
+  // Drive the active animation preset (Orbit Camera is handled by OrbitControls).
+  const mode = ANIMATIONS.find((a) => a.id === state.animationMode);
+  if (mode && mode.apply) {
+    animTime += dt * state.animationSpeed;
+    mode.apply(textGroup, animTime);
+  }
   controls.update();
   renderer.render(scene, camera);
 }
@@ -634,8 +727,7 @@ function animate() {
 // ============ INIT ============
 async function init() {
   buildPanel();
-  controls.autoRotate = state.autoRotate;
-  controls.autoRotateSpeed = state.autoRotateSpeed * 2;
+  applyAnimationMode();
   await loadHDRI(state.envPreset);
   await setActiveFont();
   updateHud();
