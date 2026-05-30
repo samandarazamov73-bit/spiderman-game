@@ -89,6 +89,11 @@ const state = {
   bevelSize: 0.02,
   bevelOffset: 0,
   bevelSegments: 6,
+  // Inner (chiseled) bevel: a separate raised ridge on the front face.
+  innerBevel: false,
+  innerBevelHeight: 0.06,
+  innerBevelInset: 0.05,
+  innerBevelSegments: 1, // 1 = sharp pyramid edge
   color: '#e8e6e3',
   roughness: 0.25,
   metalness: 0.4,
@@ -221,13 +226,18 @@ async function loadFontFromFile(file) {
 // ============ TEXT MESH ============
 function updateText() {
   if (!currentFont) return;
-  if (textMesh) {
-    textMesh.geometry.dispose();
-    textGroup.remove(textMesh);
-    textMesh = null;
+
+  // Dispose all previous text-related meshes (body + optional inner-bevel cap).
+  while (textGroup.children.length) {
+    const c = textGroup.children.pop();
+    if (c.geometry) c.geometry.dispose();
   }
+  textMesh = null;
+
   const safeText = state.text && state.text.length > 0 ? state.text : ' ';
-  const geom = new TextGeometry(safeText, {
+
+  // 1) MAIN BODY
+  const body = new TextGeometry(safeText, {
     font: currentFont,
     size: state.size,
     depth: state.depth,
@@ -238,18 +248,51 @@ function updateText() {
     bevelOffset: state.bevelEnabled ? state.bevelOffset : 0,
     bevelSegments: state.bevelSegments,
   });
-  geom.computeBoundingBox();
-  geom.computeVertexNormals();
-  const bb = geom.boundingBox;
-  geom.translate(
-    -(bb.max.x + bb.min.x) / 2,
-    -(bb.max.y + bb.min.y) / 2,
-    -(bb.max.z + bb.min.z) / 2
-  );
-  textMesh = new THREE.Mesh(geom, material);
+  body.computeBoundingBox();
+  body.computeVertexNormals();
+  const bb = body.boundingBox;
+  const dx = -(bb.max.x + bb.min.x) / 2;
+  const dy = -(bb.max.y + bb.min.y) / 2;
+  const dz = -(bb.max.z + bb.min.z) / 2;
+  body.translate(dx, dy, dz);
+  textMesh = new THREE.Mesh(body, material);
   textMesh.castShadow = true;
   textMesh.receiveShadow = true;
   textGroup.add(textMesh);
+
+  // 2) INNER BEVEL CAP (chiseled ridge on the front face)
+  // Trick: a TextGeometry with depth=0 + bevelEnabled produces a "double pyramid"
+  // along the letter outline (full outline at z=0, narrowing to the inset outline
+  // at z=±height). Place its z=0 plane on the body's front face — the back half
+  // is hidden inside the body and the front half forms a sharp inner ridge.
+  if (state.innerBevel && state.innerBevelHeight > 0 && state.innerBevelInset > 0) {
+    const cap = new TextGeometry(safeText, {
+      font: currentFont,
+      size: state.size,
+      depth: 0,
+      curveSegments: state.curveSegments,
+      bevelEnabled: true,
+      bevelThickness: state.innerBevelHeight,
+      bevelSize: state.innerBevelInset,
+      bevelOffset: 0,
+      bevelSegments: state.innerBevelSegments,
+    });
+    cap.computeBoundingBox();
+    const cbb = cap.boundingBox;
+    // Align cap's X/Y with the body's centering (Z is naturally centered).
+    cap.translate(
+      -(cbb.max.x + cbb.min.x) / 2,
+      -(cbb.max.y + cbb.min.y) / 2,
+      0
+    );
+    cap.computeVertexNormals();
+    const capMesh = new THREE.Mesh(cap, material);
+    // Body's front face after centering is at bb.max.z + dz.
+    capMesh.position.z = bb.max.z + dz;
+    capMesh.castShadow = true;
+    capMesh.receiveShadow = true;
+    textGroup.add(capMesh);
+  }
 }
 
 // ============ HDRI LOADING ============
@@ -482,8 +525,15 @@ function buildPanel() {
       b.appendChild(makeSlider('Bevel Thickness', 'bevelThickness', 0, 0.3, 0.005));
       b.appendChild(makeSlider('Bevel Size', 'bevelSize', 0, 0.2, 0.005));
       b.appendChild(makeSlider('Bevel Offset', 'bevelOffset', -0.15, 0.15, 0.005));
-      b.appendChild(el('p', { class: 'hint' }, ['Negative offset = inner bevel (engraved look)']));
       b.appendChild(makeSlider('Bevel Segments', 'bevelSegments', 1, 16, 1, true));
+    }
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(makeToggle('Inner Bevel', 'innerBevel', 'Sharp chiseled ridge on the front face'));
+    if (state.innerBevel) {
+      b.appendChild(makeSlider('Ridge Height', 'innerBevelHeight', 0.005, 0.25, 0.005));
+      b.appendChild(makeSlider('Ridge Inset', 'innerBevelInset', 0.005, 0.15, 0.005));
+      b.appendChild(makeSlider('Sharpness', 'innerBevelSegments', 1, 8, 1, true));
+      b.appendChild(el('p', { class: 'hint' }, ['Sharpness = 1 → острый гребень. Больше = округлый.']));
     }
   }));
 
@@ -573,7 +623,7 @@ function buildPanel() {
 }
 
 // ============ STATE CHANGE DISPATCH ============
-const GEOMETRY_KEYS = new Set(['text', 'size', 'depth', 'curveSegments', 'bevelEnabled', 'bevelThickness', 'bevelSize', 'bevelOffset', 'bevelSegments']);
+const GEOMETRY_KEYS = new Set(['text', 'size', 'depth', 'curveSegments', 'bevelEnabled', 'bevelThickness', 'bevelSize', 'bevelOffset', 'bevelSegments', 'innerBevel', 'innerBevelHeight', 'innerBevelInset', 'innerBevelSegments']);
 const MATERIAL_KEYS = new Set(['color', 'roughness', 'metalness', 'clearcoat', 'clearcoatRoughness', 'reflectivity']);
 
 function handleChange(key) {
@@ -582,7 +632,7 @@ function handleChange(key) {
     return;
   }
   if (GEOMETRY_KEYS.has(key)) {
-    if (key === 'bevelEnabled') buildPanel(); // show/hide bevel sub-sliders
+    if (key === 'bevelEnabled' || key === 'innerBevel') buildPanel(); // show/hide sub-sliders
     updateText();
   }
   if (MATERIAL_KEYS.has(key)) {
@@ -659,6 +709,7 @@ function resetAll() {
     fontId: state.customFont ? state.fontId : 'helvetiker-bold',
     size: 1, depth: 0.4, curveSegments: 12,
     bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.02, bevelOffset: 0, bevelSegments: 6,
+    innerBevel: false, innerBevelHeight: 0.06, innerBevelInset: 0.05, innerBevelSegments: 1,
     color: '#e8e6e3', roughness: 0.25, metalness: 0.4,
     clearcoat: 0.6, clearcoatRoughness: 0.15, reflectivity: 0.6,
     background: '#0e1014', envPreset: 'studio', envIntensity: 0.9, showShadows: true,
