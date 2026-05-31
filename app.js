@@ -50,6 +50,180 @@ const MATERIAL_PRESETS = [
 
 const BG_PRESETS = ['#0a0a0d', '#0e1014', '#1a1f2e', '#2c1b3a', '#f4f4f5', '#e8e6e3', '#5b21b6', '#0ea5e9'];
 
+// ============ LOGO TEMPLATES ============
+// One-click pro designs that bundle multiple coordinated state changes —
+// the kind of feature usually paywalled in commercial tools.
+const LOGO_TEMPLATES = [
+  {
+    name: 'Crystal Premium',
+    icon: '💎',
+    tagline: 'Glass + chisel + neon glow',
+    apply: {
+      color: '#bae6fd', metalness: 0, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02, transmission: 0.7, ior: 1.4,
+      innerBevel: true, innerBevelStyle: 'chiselHard', innerBevelDepth: 1.2, innerBevelSize: 0.10, bevelEnabled: false,
+      envPreset: 'studio', envIntensity: 1.4, background: '#0a0a0d', bgMode: 'solid',
+      bloomOn: true, bloomStrength: 0.9, bloomThreshold: 0.6, bloomRadius: 0.8, bloomColor: '#7dd3fc', bloomColorMix: 0.5,
+      decorationType: 'sparkle', decorationCount: 18, decorationColor: '#ffffff', decorationEmissive: 2.0, decorationScale: 0.5,
+      animationMode: 'spinY', animationSpeed: 0.5,
+    },
+  },
+  {
+    name: 'Liquid Gold Awards',
+    icon: '🏆',
+    tagline: 'Polished gold + sparkles',
+    apply: {
+      color: '#ffd166', metalness: 1, roughness: 0.18, clearcoat: 0.6, clearcoatRoughness: 0.08, reflectivity: 1, transmission: 0,
+      innerBevel: true, innerBevelStyle: 'chiselHard', innerBevelDepth: 1.0, innerBevelSize: 0.12, bevelEnabled: false,
+      envPreset: 'sunset', envIntensity: 1.2, background: '#1a0f00', bgMode: 'solid',
+      bloomOn: true, bloomStrength: 0.7, bloomThreshold: 0.7, bloomRadius: 0.6, bloomColor: '#ffd166', bloomColorMix: 0.4,
+      vignetteOn: true, vignetteIntensity: 0.5,
+      decorationType: 'sparkle', decorationCount: 22, decorationColor: '#fff7c4', decorationEmissive: 2.5, decorationScale: 0.55,
+      animationMode: 'pendulum', animationSpeed: 0.6,
+    },
+  },
+  {
+    name: 'Neon Synthwave',
+    icon: '🌃',
+    tagline: 'Cyan glow + dark BG',
+    apply: {
+      color: '#000000', metalness: 0, roughness: 0.5, clearcoat: 0, transmission: 0,
+      emissive: '#00d4ff', emissiveIntensity: 1.5,
+      innerBevel: false, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.04,
+      envPreset: 'night', envIntensity: 0.5, background: '#0a0a14', bgMode: 'gradient', bgGradientTop: '#1a0a3e', bgGradientBottom: '#000010',
+      bloomOn: true, bloomStrength: 1.6, bloomThreshold: 0.3, bloomRadius: 0.8, bloomColor: '#00d4ff', bloomColorMix: 0.6,
+      chromaticOn: true, chromaticAmount: 0.004,
+      outerGlowOn: true, outerGlowColor: '#00d4ff', outerGlowSize: 0.18, outerGlowIntensity: 2.0,
+      decorationType: 'bolt', decorationCount: 10, decorationColor: '#ff00ff', decorationEmissive: 2.5, decorationScale: 0.7,
+      animationMode: 'float', animationSpeed: 0.8,
+    },
+  },
+  {
+    name: 'Birthday Party',
+    icon: '🎉',
+    tagline: 'Pink + hearts + confetti',
+    apply: {
+      color: '#ff5e9c', metalness: 0, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05,
+      innerBevel: true, innerBevelStyle: 'pillow', innerBevelDepth: 0.6, innerBevelSize: 0.14,
+      envPreset: 'studio', envIntensity: 1.0, background: '#fff0f6', bgMode: 'solid',
+      bloomOn: true, bloomStrength: 0.6, bloomThreshold: 0.7, bloomRadius: 0.6, bloomColor: '#ffaad6', bloomColorMix: 0.4,
+      decorationType: 'heart', decorationCount: 22, decorationColor: '#ff5e9c', decorationScale: 0.6, decorationEmissive: 0.4,
+      particlesType: 'dust', particlesCount: 200, particlesColor: '#ffd6f0', particlesSize: 0.04, particlesEmissive: 0.6,
+      animationMode: 'breathe', animationSpeed: 1.0,
+    },
+  },
+  {
+    name: 'Minimal Premium',
+    icon: '◯',
+    tagline: 'Clean black & white',
+    apply: {
+      color: '#f5f5f5', metalness: 0, roughness: 0.4, clearcoat: 0.5, clearcoatRoughness: 0.1, transmission: 0,
+      innerBevel: false, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.02,
+      envPreset: 'studio', envIntensity: 1.0, background: '#0e1014', bgMode: 'solid',
+      bloomOn: false, vignetteOn: true, vignetteIntensity: 0.5,
+      decorationType: 'none',
+      animationMode: 'none',
+      reflectiveFloor: true, reflectiveFloorOpacity: 0.4,
+    },
+  },
+  {
+    name: 'Cyber Glitch',
+    icon: '⚡',
+    tagline: 'Pixelate + chromatic',
+    apply: {
+      color: '#22d3ee', metalness: 0.7, roughness: 0.3, clearcoat: 1, transmission: 0,
+      innerBevel: true, innerBevelStyle: 'chiselHard', innerBevelDepth: 1.3, innerBevelSize: 0.08, bevelEnabled: false,
+      envPreset: 'city', envIntensity: 0.9, background: '#06081a', bgMode: 'gradient', bgGradientTop: '#1a0a3e', bgGradientBottom: '#04061f',
+      bloomOn: true, bloomStrength: 1.4, bloomThreshold: 0.45, bloomRadius: 0.7, bloomColor: '#22d3ee', bloomColorMix: 0.5,
+      chromaticOn: true, chromaticAmount: 0.005,
+      pixelateOn: true, pixelateSize: 4,
+      decorationType: 'bolt', decorationCount: 14, decorationColor: '#22d3ee', decorationEmissive: 2.5, decorationScale: 0.65,
+      animationMode: 'shimmy', animationSpeed: 0.8,
+    },
+  },
+  {
+    name: 'Ocean Breeze',
+    icon: '🌊',
+    tagline: 'Glass + bubbles',
+    apply: {
+      color: '#7dd3fc', metalness: 0, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02, transmission: 0.85, ior: 1.4,
+      innerBevel: true, innerBevelStyle: 'smooth', innerBevelDepth: 0.8, innerBevelSize: 0.12,
+      envPreset: 'dawn', envIntensity: 1.0, background: '#082f49', bgMode: 'gradient', bgGradientTop: '#0c4a6e', bgGradientBottom: '#082f49',
+      bloomOn: true, bloomStrength: 0.8, bloomThreshold: 0.6, bloomRadius: 0.7, bloomColor: '#bae6fd', bloomColorMix: 0.5,
+      decorationType: 'bubble', decorationCount: 22, decorationColor: '#bae6fd', decorationScale: 0.6, decorationEmissive: 0,
+      particlesType: 'bokeh', particlesCount: 150, particlesColor: '#ffffff', particlesSize: 0.06, particlesEmissive: 0.4,
+      animationMode: 'float', animationSpeed: 0.7,
+    },
+  },
+  {
+    name: 'Galaxy Cosmic',
+    icon: '🪐',
+    tagline: 'Iridescent + stars',
+    apply: {
+      color: '#a855f7', metalness: 0.3, roughness: 0.2, clearcoat: 1, iridescence: 0.8, iridescenceIOR: 1.3,
+      innerBevel: true, innerBevelStyle: 'chiselHard', innerBevelDepth: 1.0, innerBevelSize: 0.08, bevelEnabled: false,
+      envPreset: 'night', envIntensity: 0.7, background: '#0c0024', bgMode: 'gradient', bgGradientTop: '#3a0e6b', bgGradientBottom: '#0c0024',
+      bloomOn: true, bloomStrength: 1.2, bloomThreshold: 0.5, bloomRadius: 1.0, bloomColor: '#c084fc', bloomColorMix: 0.55,
+      decorationType: 'star', decorationCount: 24, decorationColor: '#fef3c7', decorationEmissive: 2.0, decorationScale: 0.55,
+      particlesType: 'dust', particlesCount: 250, particlesColor: '#e0e7ff', particlesSize: 0.04, particlesEmissive: 0.7,
+      animationMode: 'spinY', animationSpeed: 0.5,
+    },
+  },
+  {
+    name: 'Hot Lava',
+    icon: '🔥',
+    tagline: 'Glowing emissive + embers',
+    apply: {
+      color: '#3d0a00', metalness: 0, roughness: 0.6, emissive: '#ff4500', emissiveIntensity: 2.5,
+      innerBevel: true, innerBevelStyle: 'chiselHard', innerBevelDepth: 1.0, innerBevelSize: 0.10,
+      envPreset: 'sunset', envIntensity: 0.5, background: '#1a0500', bgMode: 'solid',
+      bloomOn: true, bloomStrength: 1.6, bloomThreshold: 0.4, bloomRadius: 0.9, bloomColor: '#ff6a00', bloomColorMix: 0.6,
+      vignetteOn: true, vignetteIntensity: 0.6,
+      decorationType: 'flame', decorationCount: 14, decorationColor: '#ff6a00', decorationEmissive: 3.0, decorationScale: 0.7,
+      particlesType: 'embers', particlesCount: 250, particlesColor: '#ff8a40', particlesSize: 0.05, particlesEmissive: 1.0,
+      animationMode: 'breathe', animationSpeed: 1.2,
+    },
+  },
+  {
+    name: 'Winter Frost',
+    icon: '❄',
+    tagline: 'Icy + snow particles',
+    apply: {
+      color: '#dbeafe', metalness: 0, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.3, transmission: 0.5, ior: 1.31,
+      innerBevel: true, innerBevelStyle: 'chiselHard', innerBevelDepth: 1.0, innerBevelSize: 0.10,
+      envPreset: 'dawn', envIntensity: 1.2, background: '#1e3a5f', bgMode: 'gradient', bgGradientTop: '#3b6ea5', bgGradientBottom: '#0a1830',
+      bloomOn: true, bloomStrength: 0.8, bloomThreshold: 0.7, bloomRadius: 0.7, bloomColor: '#ffffff', bloomColorMix: 0.3,
+      decorationType: 'snowflake', decorationCount: 14, decorationColor: '#ffffff', decorationScale: 0.5, decorationEmissive: 0.3,
+      particlesType: 'snow', particlesCount: 600, particlesColor: '#ffffff', particlesSize: 0.04, particlesEmissive: 0.5,
+      animationMode: 'wobble', animationSpeed: 0.5,
+    },
+  },
+];
+
+function applyLogoTemplate(tpl) {
+  pushUndo();
+  Object.assign(state, tpl.apply);
+  applyAllChanges();
+}
+
+// Heuristic auto-colour: peek the active HDRI env and pick a colour based
+// on the preset's mood. Real envmap sampling would need a render-target;
+// this hand-tuned table gives equally-good 'AI-style' results without it.
+function autoColorFromHDRI() {
+  const palette = {
+    studio:    { color: '#f5f5f5', metalness: 0.3, roughness: 0.3 },
+    royal:     { color: '#ffd166', metalness: 1.0, roughness: 0.15 },
+    sunset:    { color: '#ff8a40', metalness: 0.6, roughness: 0.2 },
+    dawn:      { color: '#fda4af', metalness: 0.4, roughness: 0.25 },
+    city:      { color: '#cbd5e1', metalness: 0.8, roughness: 0.18 },
+    night:     { color: '#a855f7', metalness: 0.4, roughness: 0.25 },
+  };
+  const p = palette[state.envPreset] || palette.studio;
+  pushUndo();
+  Object.assign(state, p);
+  applyMaterial();
+  buildPanel();
+}
+
 // Animation presets. `t` is elapsed time × state.animationSpeed; `g` is the text group.
 const ANIMATIONS = [
   { id: 'none',     name: 'None',           apply: null },
@@ -690,7 +864,7 @@ const RAIL_TABS = [
   { id: 'effects',  icon: SVG_ICON.effects,  title: 'Effects',         sections: ['bloom', 'post', 'layereffects'] },
   { id: 'decorate', icon: SVG_ICON.decorate, title: 'Decorations',     sections: ['decorations', 'particles'] },
   { id: 'scene',    icon: SVG_ICON.scene,    title: 'Scene & Camera',  sections: ['environment', 'lighting', 'floor', 'camera', 'animation'] },
-  { id: 'project',  icon: SVG_ICON.project,  title: 'Export & Project', sections: ['export', 'presets', 'stats'] },
+  { id: 'project',  icon: SVG_ICON.project,  title: 'Export & Project', sections: ['templates', 'export', 'presets', 'stats'] },
 ];
 
 function getActiveTabSections() {
@@ -2642,6 +2816,37 @@ function buildPanel() {
   }));
 
   // ========== EXPORT ==========
+  // ========== TEMPLATES (one-click pro looks — Logo / Title / Cinematic) ==========
+  addSection(makeSection('templates', '✨ Logo Templates', '✨', (b) => {
+    b.appendChild(el('p', { class: 'hint' }, [
+      'One-click pro designs. Each template applies a coordinated combo of geometry, material, environment, effects and decorations.',
+    ]));
+    const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+    LOGO_TEMPLATES.forEach((tpl) => {
+      const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:flex-start; padding:8px 10px; min-height:44px; flex-direction:column; align-items:flex-start; gap:2px;' });
+      btn.innerHTML =
+        `<span style="font-size:11px; font-weight:600; color:#e7e9ee;">${tpl.icon} ${tpl.name}</span>` +
+        `<span style="font-size:9px; color:#7a7f8c;">${tpl.tagline}</span>`;
+      btn.addEventListener('click', () => applyLogoTemplate(tpl));
+      grid.appendChild(btn);
+    });
+    b.appendChild(grid);
+
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Smart Tools']));
+
+    const acBtn = el('button', { class: 'btn-secondary', type: 'button' }, ['🎨 Auto-Color from HDRI']);
+    acBtn.addEventListener('click', () => autoColorFromHDRI());
+    b.appendChild(acBtn);
+
+    const surpriseBtn = el('button', { class: 'btn-primary', type: 'button' }, ['🎲 Surprise Me!']);
+    surpriseBtn.addEventListener('click', () => {
+      const tpl = LOGO_TEMPLATES[Math.floor(Math.random() * LOGO_TEMPLATES.length)];
+      applyLogoTemplate(tpl);
+    });
+    b.appendChild(surpriseBtn);
+  }));
+
   addSection(makeSection('export', 'Export', '⤓', (b) => {
     b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Image']));
     [
@@ -3387,7 +3592,198 @@ document.addEventListener('keydown', (e) => {
   const meta = e.ctrlKey || e.metaKey;
   if (meta && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
   else if ((meta && e.key === 'y') || (meta && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); redo(); }
+  else if (meta && e.key.toLowerCase() === 's') { e.preventDefault(); exportPNG(2); }
+  else if (meta && e.key.toLowerCase() === 'e') { e.preventDefault(); exportPNG(2); }
 });
+
+// ============ TOP-BAR MENUS (File / Edit / View / Help) ============
+// Premium-looking dropdown menus that wire into the app's existing actions.
+// Each menu is a flat array of items: { label, shortcut?, action?, divider?, section? }.
+const TOPBAR_MENUS = {
+  file: [
+    { section: 'Project' },
+    { label: 'New / Reset Scene',   shortcut: 'Ctrl+N',  action: () => resetAll() },
+    { label: 'Randomize',           shortcut: 'Ctrl+R',  action: () => randomizeAll() },
+    { divider: true },
+    { section: 'Save / Load' },
+    { label: 'Quick Save Scene',                         action: () => savePreset('quick-' + new Date().toISOString().slice(11, 19)) },
+    { label: 'Open Scene Manager',                       action: () => switchToTab('project', 'presets') },
+    { divider: true },
+    { section: 'Export' },
+    { label: 'Export PNG (2×)',     shortcut: 'Ctrl+S',  action: () => exportPNG(2) },
+    { label: 'Export PNG (4×)',                          action: () => exportPNG(4) },
+    { label: 'Export Loop Video',                        action: () => exportVideo() },
+    { label: 'Export GIF',                               action: () => exportGIF() },
+    { label: 'Export GLB Model',                         action: () => exportGLB() },
+    { label: 'Open Export Tab',                          action: () => switchToTab('project', 'export') },
+  ],
+  edit: [
+    { section: 'History' },
+    { label: 'Undo',                shortcut: 'Ctrl+Z',  action: () => undo() },
+    { label: 'Redo',                shortcut: 'Ctrl+Y',  action: () => redo() },
+    { divider: true },
+    { section: 'Smart Edits' },
+    { label: 'Auto-Center & Frame',                      action: () => { frameCamera(); } },
+    { label: 'Reset Sticker Positions',                  action: () => unpinAllDecorations() },
+    { label: 'Clear All Decorations',                    action: () => { state.decorationType = 'none'; rebuildDecorations(); buildPanel(); } },
+    { label: 'Clear All Particles',                      action: () => { state.particlesType = 'none'; rebuildParticles(); buildPanel(); } },
+    { label: 'Clear All Effects (post-FX)',              action: () => {
+      pushUndo();
+      Object.assign(state, { bloomOn: false, vignetteOn: false, chromaticOn: false, grainOn: false, pixelateOn: false });
+      updatePostProcessing(); buildPanel();
+    } },
+  ],
+  view: [
+    { section: 'Camera' },
+    { label: 'Frame / Reset Camera',                     action: () => frameCamera() },
+    { label: 'Toggle Auto-Rotate',                       action: () => { pushUndo(); state.autoRotate = !state.autoRotate; controls.autoRotate = state.autoRotate; controls.autoRotateSpeed = state.autoRotateSpeed * 2; buildPanel(); } },
+    { label: 'Toggle Orthographic',                      action: () => { pushUndo(); state.orthographic = !state.orthographic; updateCamera(); buildPanel(); } },
+    { divider: true },
+    { section: 'Overlays' },
+    { label: 'Toggle Stats Overlay',                     action: () => { state.showStats = !state.showStats; document.getElementById('statsOverlay').style.display = state.showStats ? 'flex' : 'none'; } },
+    { label: 'Toggle Floor Grid',                        action: () => { state.showGrid = !state.showGrid; gridHelper.visible = state.showGrid; } },
+    { label: 'Toggle Reflective Floor',                  action: () => { state.reflectiveFloor = !state.reflectiveFloor; rebuildReflectiveFloor(); buildPanel(); } },
+    { divider: true },
+    { section: 'Workspace' },
+    { label: 'Go to Content',                            action: () => switchToTab('content') },
+    { label: 'Go to Geometry & Material',                action: () => switchToTab('shape') },
+    { label: 'Go to Effects',                            action: () => switchToTab('effects') },
+    { label: 'Go to Decorations',                        action: () => switchToTab('decorate') },
+    { label: 'Go to Scene & Camera',                     action: () => switchToTab('scene') },
+    { label: 'Go to Project',                            action: () => switchToTab('project') },
+  ],
+  help: [
+    { section: 'Help' },
+    { label: 'Show Keyboard Shortcuts',                  action: () => showShortcutsModal() },
+    { label: 'About 3D Text Studio',                     action: () => showAboutModal() },
+    { divider: true },
+    { section: 'Resources' },
+    { label: 'Three.js Documentation ↗',                 action: () => window.open('https://threejs.org/docs/', '_blank') },
+    { label: 'Source on GitHub ↗',                       action: () => window.open('https://github.com/samandarazamov73-bit/spiderman-game', '_blank') },
+  ],
+};
+
+function switchToTab(tabId, sectionId) {
+  if (state.activeTab !== tabId) {
+    state.activeTab = tabId;
+    buildLeftRail();
+    buildPanel();
+  }
+  if (sectionId) {
+    // Scroll the right panel to that section if present
+    const el = document.getElementById('sec-' + sectionId);
+    if (el) {
+      el.classList.remove('collapsed');
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+}
+
+function showShortcutsModal() {
+  showInfoModal('⌨ Keyboard Shortcuts', `
+    <table style="width:100%; font-size:11px; color:#b5b9c2;">
+      <tr><td style="padding:4px 8px;">Undo</td><td style="font-family:monospace;">Ctrl+Z</td></tr>
+      <tr><td style="padding:4px 8px;">Redo</td><td style="font-family:monospace;">Ctrl+Y / Ctrl+Shift+Z</td></tr>
+      <tr><td style="padding:4px 8px;">Export PNG</td><td style="font-family:monospace;">Ctrl+S / Ctrl+E</td></tr>
+      <tr><td style="padding:4px 8px;">Drag camera</td><td style="font-family:monospace;">Left mouse drag</td></tr>
+      <tr><td style="padding:4px 8px;">Pan camera</td><td style="font-family:monospace;">Right mouse drag</td></tr>
+      <tr><td style="padding:4px 8px;">Zoom camera</td><td style="font-family:monospace;">Scroll wheel</td></tr>
+      <tr><td style="padding:4px 8px;">Move sticker</td><td style="font-family:monospace;">Click + drag</td></tr>
+    </table>
+  `);
+}
+function showAboutModal() {
+  showInfoModal('About 3D Text Studio', `
+    <div style="font-size:12px; color:#b5b9c2; line-height:1.6;">
+      <p><b>3D Text Studio</b> — a free, open-source browser-based 3D text generator.</p>
+      <p style="margin-top:10px;">Built with three.js, vanilla JavaScript, and Tailwind CSS. No build step required.</p>
+      <p style="margin-top:10px; font-size:10px; color:#7a7f8c;">Version 0.3 · Made with ❤ by Kiro</p>
+    </div>
+  `);
+}
+function showInfoModal(title, htmlBody) {
+  const old = document.getElementById('infoModal');
+  if (old) old.remove();
+  const modal = document.createElement('div');
+  modal.id = 'infoModal';
+  modal.style.cssText = 'position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.78); backdrop-filter:blur(6px);';
+  const card = document.createElement('div');
+  card.style.cssText = 'max-width:min(520px, 90vw); width:100%; background:#0e1014; border:1px solid rgba(54,58,69,0.5); border-radius:12px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+  card.innerHTML = `
+    <div style="padding:12px 16px; border-bottom:1px solid rgba(54,58,69,0.4); font-weight:600; font-size:13px; color:#e7e9ee;">${title}</div>
+    <div style="padding:16px;">${htmlBody}</div>
+    <div style="padding:12px 16px; display:flex; justify-content:flex-end;">
+      <button class="btn-secondary" style="padding:8px 16px; flex:0 0 auto;">Close</button>
+    </div>`;
+  card.querySelector('button').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.appendChild(card);
+  document.body.appendChild(modal);
+}
+
+// Wire up the topbar menu buttons.
+(function wireTopbarMenus() {
+  const menusContainer = document.getElementById('topbarMenus');
+  if (!menusContainer) return;
+  let openPopover = null;
+  let openBtn = null;
+
+  function close() {
+    if (openPopover) { openPopover.remove(); openPopover = null; }
+    if (openBtn) { openBtn.classList.remove('open'); openBtn = null; }
+  }
+
+  function openMenu(btn, menuId) {
+    close();
+    const items = TOPBAR_MENUS[menuId];
+    if (!items) return;
+    const pop = document.createElement('div');
+    pop.className = 'topbar-menu-popover';
+    items.forEach((it) => {
+      if (it.divider) {
+        const d = document.createElement('div');
+        d.className = 'topbar-menu-divider';
+        pop.appendChild(d);
+      } else if (it.section) {
+        const s = document.createElement('div');
+        s.className = 'topbar-menu-section';
+        s.textContent = it.section;
+        pop.appendChild(s);
+      } else {
+        const b = document.createElement('button');
+        b.className = 'topbar-menu-item' + (it.danger ? ' danger' : '');
+        b.innerHTML = `<span>${it.label}</span>${it.shortcut ? `<span class="shortcut">${it.shortcut}</span>` : ''}`;
+        b.addEventListener('click', () => { close(); try { it.action && it.action(); } catch (e) { console.error(e); } });
+        pop.appendChild(b);
+      }
+    });
+    // Position popover under the button.
+    const r = btn.getBoundingClientRect();
+    const containerR = menusContainer.getBoundingClientRect();
+    pop.style.left = (r.left - containerR.left) + 'px';
+    menusContainer.appendChild(pop);
+    btn.classList.add('open');
+    openBtn = btn;
+    openPopover = pop;
+    requestAnimationFrame(() => pop.classList.add('show'));
+  }
+
+  menusContainer.querySelectorAll('.topbar-menu-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const menuId = btn.dataset.menu;
+      if (openBtn === btn) { close(); return; }
+      openMenu(btn, menuId);
+    });
+    // Hover-switch: if a menu is already open, hovering over a sibling switches.
+    btn.addEventListener('mouseenter', () => {
+      if (openBtn && openBtn !== btn) openMenu(btn, btn.dataset.menu);
+    });
+  });
+
+  document.addEventListener('click', () => close());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+})();
 
 // ============ RESIZE ============
 function resize() {

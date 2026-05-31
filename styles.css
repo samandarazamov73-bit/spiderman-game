@@ -414,3 +414,74 @@ input[type='number'].input-base {
   color: rgba(122, 127, 140, 0.85);
   line-height: 1.4;
 }
+
+
+/* ============ TOPBAR MENUS (File / Edit / View / Help) ============ */
+.topbar-menu-btn.open {
+  background: #15171d;
+  color: #e7e9ee;
+}
+.topbar-menu-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  min-width: 220px;
+  background: #0e1014;
+  border: 1px solid rgba(54, 58, 69, 0.5);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  padding: 4px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.12s, transform 0.12s;
+  pointer-events: none;
+}
+.topbar-menu-popover.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.topbar-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #b5b9c2;
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  width: 100%;
+}
+.topbar-menu-item:hover {
+  background: rgba(99, 102, 241, 0.18);
+  color: #e7e9ee;
+}
+.topbar-menu-item.danger:hover {
+  background: rgba(220, 38, 38, 0.20);
+  color: #fca5a5;
+}
+.topbar-menu-item .shortcut {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #7a7f8c;
+}
+.topbar-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 4px 2px;
+}
+.topbar-menu-section {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7a7f8c;
+  padding: 6px 10px 2px 10px;
+}
