@@ -656,7 +656,7 @@ const DEFAULTS = {
   activeTab: 'content',
 
   // Video / GIF export
-  videoDuration: 15,
+  videoDuration: 5,
   videoFps: 30,
 };
 
@@ -2656,18 +2656,18 @@ function buildPanel() {
 
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
     b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Video & Animation']));
-    b.appendChild(makeSlider('Video Duration (sec)', 'videoDuration', 3, 30, 1, true));
+    b.appendChild(makeSlider('Video Duration (sec)', 'videoDuration', 1, 60, 1, true));
     b.appendChild(makeSlider('Video FPS', 'videoFps', 12, 60, 1, true));
     [
-      ['🎬 MP4 / WebM (record live)', () => exportVideo()],
-      ['🎞 GIF (animated)', () => exportGIF()],
+      ['🎬 MP4 / WebM (Loop)', () => exportVideo()],
+      ['🎞 GIF (animated)',    () => exportGIF()],
     ].forEach(([label, fn]) => {
       const btn = el('button', { class: 'btn-secondary', type: 'button' }, [label]);
       btn.addEventListener('click', fn);
       b.appendChild(btn);
     });
     b.appendChild(el('p', { class: 'hint' }, [
-      'Video uses MediaRecorder (best in Chrome / Edge). GIF rendering may take a few seconds — wait for the download prompt.',
+      'Запись начинается мгновенно и идёт Duration секунд + 1 секунду буфера, потом сама останавливается и скачивается.',
     ]));
 
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
@@ -3030,10 +3030,12 @@ function exportVideo() {
   };
 
   _recordingInProgress = true;
-  setRecordingHud(true, state.videoDuration || 15);
+  // Record for the configured duration + 1 second buffer so the loop has a
+  // clean "tail" frame after the animation finishes its last cycle.
+  const totalSec = Math.max(1, state.videoDuration || 5) + 1;
+  setRecordingHud(true, totalSec);
   recorder.start();
-  setTimeout(() => { try { recorder.stop(); } catch (e) { console.error(e); } },
-    Math.max(1, state.videoDuration || 15) * 1000);
+  setTimeout(() => { try { recorder.stop(); } catch (e) { console.error(e); } }, totalSec * 1000);
 }
 
 // On-screen recording badge so the user can see capture is in progress.
@@ -3089,7 +3091,8 @@ async function exportGIF() {
   }
 
   const fps = Math.max(8, Math.min(30, state.videoFps || 20));
-  const duration = Math.max(1, Math.min(30, state.videoDuration || 15));
+  // Same Duration + 1s tail buffer convention as the MP4 recorder.
+  const duration = Math.max(1, Math.min(60, (state.videoDuration || 5) + 1));
   const totalFrames = Math.round(fps * duration);
   const frameDelay = Math.round(1000 / fps);
 
