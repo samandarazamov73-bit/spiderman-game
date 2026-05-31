@@ -715,6 +715,118 @@ const NECKLACE_STYLES = [
   { id: 'square',     name: '⬜ Square Link Chain',      make: makeLinkSquareLink, linkRotEachZ: Math.PI/2 },
 ];
 
+// ============ NECKLACE ANIMATIONS ============
+// Rich set of per-link motion patterns. Each animation receives:
+//   • link  — the THREE.Mesh for that link
+//   • t     — totalTime * state.necklaceAnimSpeed (seconds, scaled)
+//   • i     — link index (0..N-1)
+//   • N     — total link count
+//   • r     — current orbit radius
+//   • basePos — { x, y, z } original on-circle position
+// Each animation should compute the link's final position (and may tweak
+// rotation) without touching anything else. The Spin direction toggle is
+// applied separately via the parent ring's rotation.y.
+const NECKLACE_ANIMATIONS = [
+  { id: 'none',    name: '— Static —',
+    apply: (link, t, i, N, r, basePos) => { link.position.copy(basePos); } },
+  { id: 'spin',    name: '↻ Spin (classic)',
+    apply: (link, t, i, N, r, basePos) => { link.position.copy(basePos); } /* parent rotation does the work */ },
+  { id: 'pulse',   name: '✦ Pulse (radius breath)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const rr = r + Math.sin(t * 1.4) * 0.25;
+      link.position.set(Math.cos(a) * rr, basePos.y, Math.sin(a) * rr);
+    }},
+  { id: 'wave',    name: '〰 Wave (vertical)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      link.position.set(Math.cos(a) * r,
+        basePos.y + Math.sin(t * 2 + i * 0.5) * 0.25,
+        Math.sin(a) * r);
+    }},
+  { id: 'snake',   name: '🐍 Snake (travelling wave)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const phase = (i / N) * Math.PI * 4 - t * 3;
+      link.position.set(Math.cos(a) * r,
+        basePos.y + Math.sin(phase) * 0.30,
+        Math.sin(a) * r);
+    }},
+  { id: 'breath',  name: '🌬 Breath (in & out)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const rr = r + (Math.sin(t * 0.9) * 0.5);
+      link.position.set(Math.cos(a) * rr, basePos.y, Math.sin(a) * rr);
+    }},
+  { id: 'swing',   name: '⏲ Swing (left-right)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2 + Math.sin(t * 1.2) * 0.4;
+      link.position.set(Math.cos(a) * r, basePos.y, Math.sin(a) * r);
+    }},
+  { id: 'drop',    name: '💧 Drop (gravity bounce)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const phase = i * 0.3 + t * 1.5;
+      const drop = Math.abs(Math.sin(phase)) * 0.4;
+      link.position.set(Math.cos(a) * r,
+        basePos.y - drop,
+        Math.sin(a) * r);
+    }},
+  { id: 'spiral',  name: '🌀 Spiral (rising helix)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2 + t * 0.5;
+      const rise = Math.sin((i / N) * Math.PI * 2 + t) * 0.4;
+      link.position.set(Math.cos(a) * r, basePos.y + rise, Math.sin(a) * r);
+    }},
+  { id: 'flow',    name: '🌊 Flow (sine river)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const flow = Math.sin(a * 3 + t * 2) * 0.3;
+      const rr = r + Math.cos(t * 1.1 + i * 0.4) * 0.15;
+      link.position.set(Math.cos(a) * rr, basePos.y + flow, Math.sin(a) * rr);
+    }},
+  { id: 'dance',   name: '💃 Dance (chaotic sway)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const wx = Math.sin(t * 1.3 + i * 0.6) * 0.20;
+      const wy = Math.sin(t * 2.1 + i * 0.4) * 0.25;
+      const wz = Math.cos(t * 1.7 + i * 0.5) * 0.20;
+      link.position.set(Math.cos(a) * r + wx, basePos.y + wy, Math.sin(a) * r + wz);
+      link.rotation.x += 0.01;
+      link.rotation.z += 0.008;
+    }},
+  { id: 'scatter', name: '✨ Scatter (explode & return)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const cycle = (Math.sin(t * 0.8) * 0.5 + 0.5);  // 0..1
+      const rr = r + cycle * 1.2;
+      link.position.set(Math.cos(a) * rr, basePos.y + cycle * 0.4, Math.sin(a) * rr);
+    }},
+  { id: 'tilt',    name: '🎢 Tilt-A-Whirl',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const tiltY = Math.sin((i / N) * Math.PI * 2 - t * 1.5) * 0.35;
+      link.position.set(Math.cos(a) * r, basePos.y + tiltY, Math.sin(a) * r);
+    }},
+  { id: 'orbit3d', name: '🪐 3D Orbit (full XYZ)',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const tiltAngle = t * 0.4 + i * 0.05;
+      // Tilt the orbit plane around X-axis based on time
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r * Math.sin(tiltAngle) * 0.5;
+      const z = Math.sin(a) * r * Math.cos(tiltAngle);
+      link.position.set(x, basePos.y + y, z);
+    }},
+  { id: 'magnet',  name: '🧲 Magnetic Pull',
+    apply: (link, t, i, N, r, basePos) => {
+      const a = (i / N) * Math.PI * 2;
+      const pull = (Math.sin(t * 0.9 + i * 0.2) * 0.5 + 0.5);
+      const rr = r * (1 - pull * 0.4);
+      link.position.set(Math.cos(a) * rr, basePos.y, Math.sin(a) * rr);
+    }},
+];
+
 // ============ DEFAULTS / STATE ============
 const DEFAULTS = {
   // Text
@@ -874,7 +986,12 @@ const DEFAULTS = {
   necklaceSpin: true,
   necklaceSpinSpeed: 0.6,
   necklaceSpinDir: 1,          // +1 or -1 — clockwise or counter
-  necklaceWobble: false,       // gentle Y-axis figure-8 wobble
+  necklaceWobble: false,       // legacy figure-8 wobble (kept for back-compat)
+  necklaceAnimation: 'spin',   // see NECKLACE_ANIMATIONS — drives per-link motion
+  necklaceAnimSpeed: 1.0,
+  // Window-like reflections: use a mirror-finish material that strongly
+  // samples the env map (HDRI) so each link reflects the scene like glass.
+  necklaceMirror: true,
 
   // Animation
   autoRotate: false,           // simple toggle (back-compat)
@@ -2144,17 +2261,24 @@ function rebuildNecklace() {
   const radius = state.necklaceRadius;
   const baseScale = (style.scale || 1.0) * state.necklaceLinkSize;
 
-  // One shared material so colour/metalness/etc. updates are cheap.
+  // Window-style reflections:
+  //   • Mirror mode: roughness ≈ 0, metalness = 1, full clearcoat, very high
+  //     envMapIntensity so the HDRI is visible like a real polished surface
+  //     reflecting a window. clearcoat=1 + clearcoatRoughness=0 adds the
+  //     extra "wet glass" specular layer on top.
+  //   • Otherwise: regular PBR using the user's metalness/roughness sliders.
+  //   • Pearl style still overrides to its iridescent setup.
   const mat = new THREE.MeshPhysicalMaterial({
     color: state.necklaceColor,
-    metalness: style.pearlMat ? 0.05 : state.necklaceMetalness,
-    roughness: style.pearlMat ? 0.25 : state.necklaceRoughness,
-    clearcoat: style.pearlMat ? 1 : 0.4,
-    clearcoatRoughness: style.pearlMat ? 0.05 : 0.1,
+    metalness: style.pearlMat ? 0.05 : (state.necklaceMirror ? 1.0 : state.necklaceMetalness),
+    roughness: style.pearlMat ? 0.25 : (state.necklaceMirror ? 0.02 : state.necklaceRoughness),
+    clearcoat: style.pearlMat ? 1 : (state.necklaceMirror ? 1 : 0.4),
+    clearcoatRoughness: style.pearlMat ? 0.05 : (state.necklaceMirror ? 0.0 : 0.1),
     iridescence: style.pearlMat ? 0.6 : 0,
+    reflectivity: state.necklaceMirror ? 1.0 : 0.6,
     emissive: state.necklaceEmissive > 0 ? state.necklaceColor : '#000000',
     emissiveIntensity: state.necklaceEmissive,
-    envMapIntensity: 1.5,
+    envMapIntensity: state.necklaceMirror ? 3.0 : 1.5,
   });
 
   const baseGeom = style.make();
@@ -2165,7 +2289,8 @@ function rebuildNecklace() {
     let s = baseScale;
     if (style.varyEvery && i % style.varyEvery === 0) s = baseScale * (style.variantScale || 1.4);
     const link = new THREE.Mesh(baseGeom, mat);
-    link.position.set(Math.cos(a) * radius, 0, Math.sin(a) * radius);
+    const x = Math.cos(a) * radius, z = Math.sin(a) * radius;
+    link.position.set(x, 0, z);
     link.scale.setScalar(s);
 
     // Orient link so it sits naturally along the ring tangent.
@@ -2180,6 +2305,11 @@ function rebuildNecklace() {
     }
     link.castShadow = true;
     link.receiveShadow = true;
+    // Per-link metadata used by the animation dispatcher
+    link.userData.basePos = link.position.clone();
+    link.userData.linkIndex = i;
+    link.userData.linkCount = N;
+    link.userData.linkRadius = radius;
     necklaceRing.add(link);
   }
 
@@ -2194,15 +2324,37 @@ function rebuildNecklace() {
 
 function animateNecklace(dt, totalT) {
   if (state.necklaceStyle === 'none') return;
+
+  // Parent ring spin — applied for both 'spin' animation and any other
+  // pattern that wants the whole chain to also rotate around Y. We honour
+  // necklaceSpin so the user can disable continuous rotation.
   if (state.necklaceSpin) {
     necklaceRing.rotation.y += dt * state.necklaceSpinSpeed * state.necklaceSpinDir;
   }
+
+  // Per-link animation pattern (none / pulse / wave / snake / ...).
+  const animDef = NECKLACE_ANIMATIONS.find(a => a.id === state.necklaceAnimation);
+  if (animDef && animDef.apply && state.necklaceAnimation !== 'none' && state.necklaceAnimation !== 'spin') {
+    const t = totalT * (state.necklaceAnimSpeed || 1.0);
+    necklaceRing.children.forEach((link) => {
+      const ud = link.userData;
+      if (!ud || !ud.basePos) return;
+      animDef.apply(link, t, ud.linkIndex, ud.linkCount, ud.linkRadius, ud.basePos);
+    });
+  } else if (state.necklaceAnimation === 'none') {
+    // Snap each link back to its base position so the static look is clean.
+    necklaceRing.children.forEach((link) => {
+      const ud = link.userData;
+      if (ud && ud.basePos) link.position.copy(ud.basePos);
+    });
+  }
+
+  // Legacy wobble still works alongside any animation pattern.
   if (state.necklaceWobble) {
     necklacePivot.rotation.z = Math.sin(totalT * 0.8) * 0.08;
-    necklacePivot.rotation.y = Math.sin(totalT * 0.5) * 0.15;
+    // Don't override Y here — that would fight the spin.
   } else {
     necklacePivot.rotation.z = 0;
-    necklacePivot.rotation.y = 0;
   }
 }
 
@@ -2210,8 +2362,22 @@ function applyNecklaceMaterial() {
   const mat = necklaceRing.userData && necklaceRing.userData.sharedMat;
   if (!mat) return;
   mat.color.set(state.necklaceColor);
-  mat.metalness = state.necklaceMetalness;
-  mat.roughness = state.necklaceRoughness;
+  // Mirror mode overrides metalness / roughness for that mirror-finish look.
+  if (state.necklaceMirror) {
+    mat.metalness = 1.0;
+    mat.roughness = 0.02;
+    mat.clearcoat = 1;
+    mat.clearcoatRoughness = 0.0;
+    mat.envMapIntensity = 3.0;
+    mat.reflectivity = 1.0;
+  } else {
+    mat.metalness = state.necklaceMetalness;
+    mat.roughness = state.necklaceRoughness;
+    mat.clearcoat = 0.4;
+    mat.clearcoatRoughness = 0.1;
+    mat.envMapIntensity = 1.5;
+    mat.reflectivity = 0.6;
+  }
   if (state.necklaceEmissive > 0) {
     mat.emissive.set(state.necklaceColor);
   } else {
@@ -2949,12 +3115,44 @@ function buildPanel() {
 
       b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
       b.appendChild(makeColor('Color', 'necklaceColor'));
-      b.appendChild(makeSlider('Metalness', 'necklaceMetalness', 0, 1, 0.01));
-      b.appendChild(makeSlider('Roughness', 'necklaceRoughness', 0, 1, 0.01));
+      b.appendChild(makeToggle('🪟 Mirror Reflections', 'necklaceMirror', 'Polished window-like reflections (HDRI envmap, roughness ≈ 0)'));
+      if (!state.necklaceMirror) {
+        b.appendChild(makeSlider('Metalness', 'necklaceMetalness', 0, 1, 0.01));
+        b.appendChild(makeSlider('Roughness', 'necklaceRoughness', 0, 1, 0.01));
+      } else {
+        b.appendChild(el('p', { class: 'hint' }, [
+          'Mirror mode forces metalness=1, roughness≈0 — like polished glass / chrome reflecting the HDRI scene.',
+        ]));
+      }
       b.appendChild(makeSlider('Glow', 'necklaceEmissive', 0, 4, 0.05));
 
       b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
-      b.appendChild(makeToggle('Spin', 'necklaceSpin', 'Crутить цепь вокруг текста'));
+      b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Animation']));
+
+      // Animation pattern dropdown — choose a per-link motion preset.
+      b.appendChild(makeSelect('Pattern', 'necklaceAnimation',
+        NECKLACE_ANIMATIONS.map(a => ({ value: a.id, label: a.name }))
+      ));
+      // Visual grid for quick-picking animations
+      const animGrid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+      NECKLACE_ANIMATIONS.forEach(a => {
+        const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:flex-start; padding:6px 10px;' });
+        if (state.necklaceAnimation === a.id) { btn.style.background = 'rgba(99,102,241,0.18)'; btn.style.color = '#a5a7f5'; }
+        btn.textContent = a.name;
+        btn.addEventListener('click', () => {
+          pushUndo();
+          state.necklaceAnimation = a.id;
+          buildPanel();
+        });
+        animGrid.appendChild(btn);
+      });
+      b.appendChild(animGrid);
+      if (state.necklaceAnimation !== 'none') {
+        b.appendChild(makeSlider('Anim Speed', 'necklaceAnimSpeed', 0, 4, 0.05));
+      }
+
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(makeToggle('Spin (whole ring)', 'necklaceSpin', 'Crутить цепь вокруг текста'));
       if (state.necklaceSpin) {
         b.appendChild(makeSlider('Spin Speed', 'necklaceSpinSpeed', 0, 4, 0.05));
         // Direction toggle (numeric +1 / -1).
@@ -2977,7 +3175,7 @@ function buildPanel() {
         dirRow.appendChild(dirGroup);
         b.appendChild(dirRow);
       }
-      b.appendChild(makeToggle('Wobble', 'necklaceWobble', 'Лёгкое покачивание'));
+      b.appendChild(makeToggle('Wobble', 'necklaceWobble', 'Лёгкое покачивание Z-axis'));
 
       // Quick "vibe" presets
       b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
@@ -3292,10 +3490,10 @@ function handleChange(key) {
   //   the per-link instances or the pivot transform.
   // - Material-only changes (color, metalness, roughness, emissive) take a
   //   cheap path that updates the shared MeshPhysicalMaterial uniforms.
-  if (key === 'necklaceStyle') buildPanel();
+  if (key === 'necklaceStyle' || key === 'necklaceMirror' || key === 'necklaceAnimation') buildPanel();
   if ([
     'necklaceStyle', 'necklaceLinkCount', 'necklaceRadius',
-    'necklaceLinkSize', 'necklaceTilt',
+    'necklaceLinkSize', 'necklaceTilt', 'necklaceMirror',
   ].includes(key)) {
     rebuildNecklace();
   }
