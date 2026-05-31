@@ -89,6 +89,158 @@ const MATCAPS = [
   { id: 'clay',    name: 'Clay',    build: () => makeMatcap([[0,'#fff5e0'],[0.4,'#f0c89a'],[0.7,'#7a5a40'],[1,'#1a0e08']]) },
 ];
 
+// ============ BLOOM PRESETS ============
+const BLOOM_PRESETS = [
+  { name: 'Subtle',    vals: { bloomStrength: 0.35, bloomThreshold: 0.85, bloomRadius: 0.4, bloomColor: '#ffffff', bloomColorMix: 0,    chromaticOn: false, vignetteOn: false, grainOn: false } },
+  { name: 'Dreamy',    vals: { bloomStrength: 1.1,  bloomThreshold: 0.55, bloomRadius: 0.9, bloomColor: '#ffd6f5', bloomColorMix: 0.4,  chromaticOn: false, vignetteOn: true,  vignetteIntensity: 0.4, grainOn: false } },
+  { name: 'Neon',      vals: { bloomStrength: 1.6,  bloomThreshold: 0.3,  bloomRadius: 0.7, bloomColor: '#7dd3fc', bloomColorMix: 0.55, chromaticOn: true,  chromaticAmount: 0.004, vignetteOn: true, vignetteIntensity: 0.55, grainOn: false } },
+  { name: 'Cinematic', vals: { bloomStrength: 0.55, bloomThreshold: 0.78, bloomRadius: 0.6, bloomColor: '#ffe6c4', bloomColorMix: 0.25, chromaticOn: true,  chromaticAmount: 0.0015, vignetteOn: true, vignetteIntensity: 0.7, grainOn: true, grainAmount: 0.12 } },
+  { name: 'Intense',   vals: { bloomStrength: 2.5,  bloomThreshold: 0.2,  bloomRadius: 1.0, bloomColor: '#ffffff', bloomColorMix: 0,    chromaticOn: true,  chromaticAmount: 0.006, vignetteOn: true, vignetteIntensity: 0.8, grainOn: false } },
+  { name: 'Magic',     vals: { bloomStrength: 1.4,  bloomThreshold: 0.5,  bloomRadius: 1.2, bloomColor: '#a855f7', bloomColorMix: 0.6,  chromaticOn: true,  chromaticAmount: 0.003, vignetteOn: false, grainOn: false } },
+  { name: 'Sun Flare', vals: { bloomStrength: 1.8,  bloomThreshold: 0.6,  bloomRadius: 0.8, bloomColor: '#ffd166', bloomColorMix: 0.7,  chromaticOn: false, vignetteOn: true, vignetteIntensity: 0.5, grainOn: false } },
+];
+
+// ============ 3D DECORATION GENERATORS ============
+// Each decoration returns a single THREE.Object3D (mesh or group).
+function makeStarGeom() {
+  // 5-pointed star extruded
+  const shape = new THREE.Shape();
+  const outer = 0.5, inner = 0.22;
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = (Math.PI * 2 * i) / 10 - Math.PI / 2;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.04, bevelSegments: 3, curveSegments: 8 });
+}
+function makeHeartGeom() {
+  const x = 0, y = 0, shape = new THREE.Shape();
+  shape.moveTo(x, y - 0.15);
+  shape.bezierCurveTo(x, y - 0.15, x - 0.25, y - 0.55, x - 0.5, y - 0.15);
+  shape.bezierCurveTo(x - 0.75, y + 0.25, x - 0.5, y + 0.55, x, y + 0.25);
+  shape.bezierCurveTo(x + 0.5, y + 0.55, x + 0.75, y + 0.25, x + 0.5, y - 0.15);
+  shape.bezierCurveTo(x + 0.25, y - 0.55, x, y - 0.15, x, y - 0.15);
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.2, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 4, curveSegments: 12 });
+}
+function makeNoteGeom() {
+  // Quarter note: round head + stem
+  const head = new THREE.SphereGeometry(0.18, 16, 12);
+  head.scale(1.3, 1, 0.5);
+  const stem = new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8);
+  stem.translate(0.18, 0.45, 0);
+  // merge
+  return mergeGeoms([head, stem]);
+}
+function makeDoubleNoteGeom() {
+  // Eighth note pair (♫)
+  const h1 = new THREE.SphereGeometry(0.16, 16, 12); h1.scale(1.3, 1, 0.5); h1.translate(-0.25, 0, 0);
+  const h2 = new THREE.SphereGeometry(0.16, 16, 12); h2.scale(1.3, 1, 0.5); h2.translate(0.25, 0, 0);
+  const s1 = new THREE.CylinderGeometry(0.035, 0.035, 0.85, 8); s1.translate(-0.10, 0.42, 0);
+  const s2 = new THREE.CylinderGeometry(0.035, 0.035, 0.85, 8); s2.translate(0.40, 0.42, 0);
+  const beam = new THREE.BoxGeometry(0.55, 0.08, 0.06); beam.translate(0.15, 0.82, 0);
+  return mergeGeoms([h1, h2, s1, s2, beam]);
+}
+function makeChainLink() {
+  // Single torus that forms a link
+  return new THREE.TorusGeometry(0.32, 0.08, 12, 32);
+}
+function makeSparkleGeom() {
+  // 4-pointed sparkle / sparkle plus
+  const shape = new THREE.Shape();
+  const long = 0.5, short = 0.08;
+  shape.moveTo(0, long);
+  shape.lineTo(short, short);
+  shape.lineTo(long, 0);
+  shape.lineTo(short, -short);
+  shape.lineTo(0, -long);
+  shape.lineTo(-short, -short);
+  shape.lineTo(-long, 0);
+  shape.lineTo(-short, short);
+  shape.closePath();
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.12, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3, curveSegments: 6 });
+}
+function makeDiamondGeom() {
+  // Octahedron = simple gem
+  const g = new THREE.OctahedronGeometry(0.45, 0);
+  return g;
+}
+function makeCrownGeom() {
+  // Simple crown: ring + 5 spikes
+  const ring = new THREE.CylinderGeometry(0.45, 0.45, 0.2, 24, 1, true);
+  const parts = [ring];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const sp = new THREE.ConeGeometry(0.1, 0.35, 8);
+    sp.translate(Math.cos(a) * 0.42, 0.27, Math.sin(a) * 0.42);
+    parts.push(sp);
+  }
+  return mergeGeoms(parts);
+}
+function makeBoltGeom() {
+  // Lightning bolt
+  const shape = new THREE.Shape();
+  shape.moveTo(0.05, 0.55);
+  shape.lineTo(-0.20, 0.05);
+  shape.lineTo(-0.02, 0.05);
+  shape.lineTo(-0.15, -0.55);
+  shape.lineTo(0.20, -0.05);
+  shape.lineTo(0.02, -0.05);
+  shape.closePath();
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.03, bevelSegments: 2, curveSegments: 4 });
+}
+function makeRingGeom() {
+  return new THREE.TorusGeometry(0.35, 0.08, 16, 48);
+}
+function makeFlameGeom() {
+  // Teardrop pointing up
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.6);
+  shape.bezierCurveTo(0.3, 0.4, 0.3, -0.1, 0, -0.3);
+  shape.bezierCurveTo(-0.3, -0.1, -0.3, 0.4, 0, 0.6);
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3, curveSegments: 16 });
+}
+function makeBubbleGeom() {
+  return new THREE.SphereGeometry(0.32, 24, 18);
+}
+function makeSpiralGeom() {
+  // Helix-ish spiral as a tube
+  const pts = [];
+  for (let i = 0; i <= 60; i++) {
+    const t = i / 60;
+    const a = t * Math.PI * 4;
+    pts.push(new THREE.Vector3(Math.cos(a) * 0.3 * t, t * 0.6 - 0.3, Math.sin(a) * 0.3 * t));
+  }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.05, 8, false);
+}
+
+// Merge helper using three's BufferGeometryUtils (lazy-loaded elsewhere; here
+// we accept that merging is asynchronous-safe through our cached `_bgU`).
+function mergeGeoms(arr) {
+  if (_bgU) return _bgU.mergeGeometries(arr, false);
+  // Fallback: pick first and queue lazy merge
+  getBufferGeometryUtils().then(() => updateText());
+  return arr[0];
+}
+
+const DECORATIONS = [
+  { id: 'none',    name: 'None' },
+  { id: 'star',    name: '⭐ Stars',         emissiveDefault: 0,   make: makeStarGeom },
+  { id: 'heart',   name: '❤ Hearts',         emissiveDefault: 0,   make: makeHeartGeom },
+  { id: 'note',    name: '♪ Music Notes',    emissiveDefault: 0,   make: makeNoteGeom },
+  { id: 'note2',   name: '♫ Beamed Notes',   emissiveDefault: 0,   make: makeDoubleNoteGeom },
+  { id: 'chain',   name: '⛓ Chain Links',    emissiveDefault: 0,   make: makeChainLink, ring: true },
+  { id: 'sparkle', name: '✦ Sparkles',       emissiveDefault: 1.5, make: makeSparkleGeom },
+  { id: 'diamond', name: '💎 Diamonds',      emissiveDefault: 0,   make: makeDiamondGeom, glassy: true },
+  { id: 'crown',   name: '👑 Crowns',        emissiveDefault: 0,   make: makeCrownGeom },
+  { id: 'bolt',    name: '⚡ Lightning',      emissiveDefault: 1.8, make: makeBoltGeom },
+  { id: 'ring',    name: '○ Rings',          emissiveDefault: 0,   make: makeRingGeom },
+  { id: 'flame',   name: '🔥 Flames',        emissiveDefault: 2.0, make: makeFlameGeom },
+  { id: 'bubble',  name: '○ Bubbles',        emissiveDefault: 0,   make: makeBubbleGeom, glassy: true },
+  { id: 'spiral',  name: '@ Spirals',        emissiveDefault: 0,   make: makeSpiralGeom },
+];
+
 // ============ DEFAULTS / STATE ============
 const DEFAULTS = {
   // Text
@@ -108,10 +260,20 @@ const DEFAULTS = {
   bevelSize: 0.02,
   bevelOffset: 0,
   bevelSegments: 6,
+  // Photoshop-style inner bevel
   innerBevel: false,
-  innerBevelHeight: 0.08,
-  innerBevelInset: 0.18,
-  innerBevelSegments: 1,
+  innerBevelStyle: 'chiselHard',  // chiselHard | chiselSoft | smooth | pillow | stroke
+  innerBevelDepth: 0.7,            // Photoshop "Depth" (0..1) — height multiplier
+  innerBevelSize: 0.08,            // Photoshop "Size" — how far the bevel extends
+  innerBevelSoften: 0,             // Photoshop "Soften" — 0 = razor sharp, 1 = smooth
+  innerBevelDirection: 'up',       // 'up' = raised, 'down' = engraved
+  innerBevelHighlight: '#ffffff',
+  innerBevelShadow: '#000000',
+  innerBevelHighlightOpacity: 0.75,
+  innerBevelShadowOpacity: 0.75,
+  innerBevelAngle: 120,            // light angle in degrees
+  innerBevelAltitude: 30,
+  innerBevelResolution: 512,       // distance-field resolution per axis
 
   // Material — base
   shadingMode: 'pbr', // 'pbr' | 'matcap' | 'normal'
@@ -180,8 +342,26 @@ const DEFAULTS = {
   bloomStrength: 0.5,
   bloomThreshold: 0.85,
   bloomRadius: 0.6,
+  bloomColor: '#ffffff',
+  bloomColorMix: 0,            // 0 = white, 1 = full bloomColor tint
   vignetteOn: false,
   vignetteIntensity: 0.5,
+  chromaticOn: false,
+  chromaticAmount: 0.003,
+  grainOn: false,
+  grainAmount: 0.08,
+
+  // 3D Decorations (chains, music notes, stars, hearts, etc.)
+  decorationType: 'none',      // see DECORATIONS below
+  decorationCount: 14,
+  decorationScale: 1.0,
+  decorationSpread: 1.6,       // how far around the text they sit
+  decorationColor: '#ffd166',
+  decorationMetalness: 0.9,
+  decorationRoughness: 0.2,
+  decorationEmissive: 0,
+  decorationFloat: true,       // gentle bobbing animation
+  decorationSpinIndividual: true,
 
   // Animation
   autoRotate: false,           // simple toggle (back-compat)
@@ -296,6 +476,10 @@ const outlineMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THR
 const textGroup = new THREE.Group();
 scene.add(textGroup);
 
+// Decorations group — orbiting/floating 3D items around the text.
+const decorationsGroup = new THREE.Group();
+scene.add(decorationsGroup);
+
 // PMREM for HDRI
 const pmrem = new THREE.PMREMGenerator(renderer);
 pmrem.compileEquirectangularShader();
@@ -304,6 +488,10 @@ pmrem.compileEquirectangularShader();
 let composer = null;
 let bloomPass = null;
 let vignettePass = null;
+let chromaticPass = null;
+let grainPass = null;
+let bloomTintPass = null;
+
 const VignetteShader = {
   uniforms: { tDiffuse: { value: null }, intensity: { value: 0.5 } },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -315,22 +503,87 @@ const VignetteShader = {
       gl_FragColor = c; }`,
 };
 
+const ChromaticShader = {
+  uniforms: { tDiffuse: { value: null }, amount: { value: 0.003 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float amount; varying vec2 vUv;
+    void main(){
+      vec2 dir = vUv - 0.5;
+      float r = texture2D(tDiffuse, vUv + dir * amount).r;
+      float g = texture2D(tDiffuse, vUv).g;
+      float b = texture2D(tDiffuse, vUv - dir * amount).b;
+      float a = texture2D(tDiffuse, vUv).a;
+      gl_FragColor = vec4(r, g, b, a);
+    }`,
+};
+
+const GrainShader = {
+  uniforms: { tDiffuse: { value: null }, amount: { value: 0.08 }, time: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float amount; uniform float time; varying vec2 vUv;
+    float rand(vec2 co){ return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      float n = rand(vUv + time) - 0.5;
+      c.rgb += n * amount;
+      gl_FragColor = c;
+    }`,
+};
+
+// Tint the bloom output with a colour. We post-process after bloom to multiply
+// the bloomed highlights by a colour mix factor without re-writing the bloom
+// pass itself.
+const BloomTintShader = {
+  uniforms: { tDiffuse: { value: null }, tintColor: { value: new THREE.Color('#ffffff') }, mixAmount: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 tintColor; uniform float mixAmount; varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      // Pull out highlights and mix them with tintColor
+      float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+      float hi = smoothstep(0.6, 1.4, lum);
+      vec3 tinted = mix(c.rgb, c.rgb * tintColor, mixAmount * hi);
+      gl_FragColor = vec4(tinted, c.a);
+    }`,
+};
+
 function ensureComposer() {
   if (composer) return composer;
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+
   bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), state.bloomStrength, state.bloomRadius, state.bloomThreshold);
   bloomPass.enabled = state.bloomOn;
   composer.addPass(bloomPass);
+
+  bloomTintPass = new ShaderPass(BloomTintShader);
+  bloomTintPass.uniforms.tintColor.value = new THREE.Color(state.bloomColor);
+  bloomTintPass.uniforms.mixAmount.value = state.bloomColorMix;
+  bloomTintPass.enabled = state.bloomOn && state.bloomColorMix > 0;
+  composer.addPass(bloomTintPass);
+
+  chromaticPass = new ShaderPass(ChromaticShader);
+  chromaticPass.uniforms.amount.value = state.chromaticAmount;
+  chromaticPass.enabled = state.chromaticOn;
+  composer.addPass(chromaticPass);
+
   vignettePass = new ShaderPass(VignetteShader);
   vignettePass.uniforms.intensity.value = state.vignetteIntensity;
   vignettePass.enabled = state.vignetteOn;
   composer.addPass(vignettePass);
+
+  grainPass = new ShaderPass(GrainShader);
+  grainPass.uniforms.amount.value = state.grainAmount;
+  grainPass.enabled = state.grainOn;
+  composer.addPass(grainPass);
+
   composer.addPass(new OutputPass());
   return composer;
 }
 
-function postEnabled() { return state.bloomOn || state.vignetteOn; }
+function postEnabled() {
+  return state.bloomOn || state.vignetteOn || state.chromaticOn || state.grainOn;
+}
 
 // ============ FONT LOADING ============
 const fontCache = new Map();
@@ -452,13 +705,248 @@ function mergeBufferGeometriesFallback(geoms) {
   return _bgU.mergeGeometries(geoms, false);
 }
 
+// ============ INNER BEVEL (Photoshop-style) ============
+// We render the text silhouette to a 2D canvas, build a distance-field from
+// the outline (each pixel = distance to nearest edge), then build a high-res
+// plane and displace its vertices using a profile function — this is exactly
+// how Photoshop's "Bevel and Emboss" works internally.
+function buildInnerBevelCap(bodyGeom) {
+  if (!bodyGeom.boundingBox) bodyGeom.computeBoundingBox();
+  const bb = bodyGeom.boundingBox;
+  const padPx = 32;
+  const w = bb.max.x - bb.min.x;
+  const h = bb.max.y - bb.min.y;
+  if (w < 0.001 || h < 0.001) return null;
+
+  const targetMax = state.innerBevelResolution;
+  const aspect = w / h;
+  let texW, texH;
+  if (aspect >= 1) { texW = targetMax; texH = Math.max(64, Math.round(targetMax / aspect)); }
+  else            { texH = targetMax; texW = Math.max(64, Math.round(targetMax * aspect)); }
+
+  // 1) Rasterize letter silhouette to a binary mask using the same font path.
+  const canvas = document.createElement('canvas');
+  canvas.width = texW + padPx * 2;
+  canvas.height = texH + padPx * 2;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Use the font's own shape paths (currentFont.generateShapes) → preserves
+  // the *exact* glyph outlines used for the 3D body.
+  const shapes = currentFont.generateShapes(state.text && state.text.length ? state.text : ' ', state.size);
+  // Compute bounding box of these shapes
+  let sxmin = Infinity, symin = Infinity, sxmax = -Infinity, symax = -Infinity;
+  shapes.forEach(s => {
+    const pts = s.getPoints(64);
+    pts.forEach(p => {
+      if (p.x < sxmin) sxmin = p.x; if (p.x > sxmax) sxmax = p.x;
+      if (p.y < symin) symin = p.y; if (p.y > symax) symax = p.y;
+    });
+  });
+  const sw = sxmax - sxmin, sh = symax - symin;
+  const sx = texW / sw, sy = texH / sh;
+  const scale = Math.min(sx, sy);
+  const offX = padPx + (texW - sw * scale) / 2 - sxmin * scale;
+  const offY = padPx + (texH - sh * scale) / 2 + symax * scale;
+  ctx.fillStyle = '#fff';
+  shapes.forEach(shape => {
+    ctx.beginPath();
+    drawShape(ctx, shape, scale, offX, offY);
+    if (shape.holes) {
+      shape.holes.forEach(hole => drawShape(ctx, hole, scale, offX, offY, true));
+    }
+    ctx.fill('evenodd');
+  });
+
+  // 2) Read pixels and build a binary inside/outside grid.
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const W = canvas.width, H = canvas.height;
+  const inside = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) inside[i] = img.data[i * 4] > 128 ? 1 : 0;
+
+  // 3) Compute Euclidean distance transform — for every interior pixel, the
+  //    distance (in pixels) to the nearest exterior pixel. Two-pass approx.
+  const dist = computeEDT(inside, W, H);
+
+  // 4) Convert Photoshop "Size" (in world units) → pixel radius.
+  //    state.innerBevelSize is in font-size units; one font-size unit ≈
+  //    `scale` pixels, but font-size ≈ state.size, so: bevelPixels = size×scale.
+  const bevelPixels = Math.max(2, state.innerBevelSize * scale);
+  const heightWorld = state.innerBevelDepth * 0.4;  // world-space ridge height
+
+  // 5) Build a plane mesh covering the text bbox at high resolution and
+  //    displace its Z from the distance field via a profile function.
+  const segX = Math.min(380, Math.max(60, Math.round(texW / 1.5)));
+  const segY = Math.min(380, Math.max(60, Math.round(texH / 1.5)));
+  const plane = new THREE.PlaneGeometry(w, h, segX, segY);
+  const pos = plane.attributes.position;
+  const dirSign = state.innerBevelDirection === 'down' ? -1 : 1;
+  const profile = bevelProfile(state.innerBevelStyle, state.innerBevelSoften);
+
+  // Optional: punch out exterior so the cap matches the letter silhouette.
+  // We mark vertices outside as having z=0 and slightly behind so they sink
+  // into the body; we additionally cull triangles fully outside via a mask.
+  const vertOutside = new Uint8Array(pos.count);
+
+  for (let i = 0; i < pos.count; i++) {
+    const vx = pos.getX(i);
+    const vy = pos.getY(i);
+    // Map vertex (centered around 0,0 in world) → texture pixel
+    const u = (vx + w / 2) / w;
+    const v = 1 - (vy + h / 2) / h;
+    const tx = padPx + Math.round(u * texW);
+    const ty = padPx + Math.round(v * texH);
+    const idx = ty * W + tx;
+    const d = (idx >= 0 && idx < dist.length) ? dist[idx] : 0;
+    if (d <= 0) {
+      vertOutside[i] = 1;
+      pos.setZ(i, -0.002);  // slightly behind body front face
+      continue;
+    }
+    // Normalised distance into the bevel region (0=outline edge, 1=ridge top)
+    const t = Math.min(1, d / bevelPixels);
+    const z = profile(t) * heightWorld * dirSign;
+    pos.setZ(i, z);
+  }
+  pos.needsUpdate = true;
+
+  // Cull triangles where all three vertices are outside the silhouette.
+  const oldIndex = plane.index;
+  const newIdx = [];
+  if (oldIndex) {
+    for (let i = 0; i < oldIndex.count; i += 3) {
+      const a = oldIndex.getX(i), b = oldIndex.getX(i + 1), c = oldIndex.getX(i + 2);
+      if (vertOutside[a] && vertOutside[b] && vertOutside[c]) continue;
+      newIdx.push(a, b, c);
+    }
+    plane.setIndex(newIdx);
+  }
+  plane.computeVertexNormals();
+
+  // For "Smooth" style we want averaged normals (already smooth from the
+  // continuous profile). For "Chisel Hard" we want flat shading per face so
+  // the ridge is visually razor-sharp.
+  const useFlat = (state.innerBevelStyle === 'chiselHard' || state.innerBevelStyle === 'stroke');
+  // Choose a material that follows the active body shading.
+  let capMat;
+  if (state.shadingMode === 'matcap') {
+    capMat = matcapMaterial.clone();
+  } else if (state.shadingMode === 'normal') {
+    capMat = normalMaterial.clone();
+  } else {
+    capMat = pbrMaterial.clone();
+  }
+  capMat.flatShading = useFlat;
+  capMat.needsUpdate = true;
+
+  const mesh = new THREE.Mesh(plane, capMat);
+  mesh.userData.disposableMaterial = true;
+  return mesh;
+}
+
+function drawShape(ctx, shape, scale, offX, offY) {
+  const pts = shape.getPoints(64);
+  pts.forEach((p, i) => {
+    const x = p.x * scale + offX;
+    const y = -p.y * scale + offY;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+}
+
+// Two-pass squared-EDT (Felzenszwalb is overkill; this is a fast approximation
+// using a chamfer-distance-like double sweep that's good enough for bevels).
+function computeEDT(mask, W, H) {
+  const INF = 1e9;
+  const d = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) d[i] = mask[i] ? INF : 0;
+  // Forward pass
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      if (!mask[i]) continue;
+      let m = d[i];
+      if (x > 0)        m = Math.min(m, d[i - 1] + 1);
+      if (y > 0)        m = Math.min(m, d[i - W] + 1);
+      if (x > 0 && y > 0)        m = Math.min(m, d[i - W - 1] + Math.SQRT2);
+      if (x < W - 1 && y > 0)    m = Math.min(m, d[i - W + 1] + Math.SQRT2);
+      d[i] = m;
+    }
+  }
+  // Backward pass
+  for (let y = H - 1; y >= 0; y--) {
+    for (let x = W - 1; x >= 0; x--) {
+      const i = y * W + x;
+      if (!mask[i]) continue;
+      let m = d[i];
+      if (x < W - 1)            m = Math.min(m, d[i + 1] + 1);
+      if (y < H - 1)            m = Math.min(m, d[i + W] + 1);
+      if (x < W - 1 && y < H - 1) m = Math.min(m, d[i + W + 1] + Math.SQRT2);
+      if (x > 0 && y < H - 1)     m = Math.min(m, d[i + W - 1] + Math.SQRT2);
+      d[i] = m;
+    }
+  }
+  return d;
+}
+
+// Photoshop-style profile functions. Input t ∈ [0,1] = normalised distance
+// into the bevel band. Output ∈ [0,1] = ridge height factor.
+function bevelProfile(style, soften) {
+  // soften: 0 = razor sharp, 1 = fully smoothed
+  const s = THREE.MathUtils.clamp(soften, 0, 1);
+  switch (style) {
+    case 'chiselHard':
+      // Linear ramp → angular peak → razor-sharp ridge with flat sides
+      return (t) => {
+        if (s < 0.01) return Math.min(1, t);  // pure linear = perfect chisel
+        // Mix linear with smoothstep based on `s`
+        const lin = Math.min(1, t);
+        const sm = t * t * (3 - 2 * t);
+        return lin * (1 - s) + sm * s;
+      };
+    case 'chiselSoft':
+      // Linear with rounded peak
+      return (t) => {
+        const k = 0.85 + s * 0.15;
+        const peakStart = k;
+        if (t < peakStart) return t / peakStart;
+        const tn = (t - peakStart) / (1 - peakStart);
+        return 1 - Math.pow(1 - tn, 2) * 0;  // rolls over at top
+      };
+    case 'smooth':
+      // Sine half-wave — Photoshop's "Smooth" (gentle hill)
+      return (t) => Math.sin(t * Math.PI / 2);
+    case 'pillow':
+      // Concave start, convex finish — looks like a puffy pillow
+      return (t) => {
+        const a = 1 - Math.cos(t * Math.PI / 2);
+        const b = Math.sin(t * Math.PI / 2);
+        return a * 0.4 + b * 0.6;
+      };
+    case 'stroke':
+      // Sharp triangle peak — only a thin ridge along the outline
+      return (t) => {
+        const peak = 0.5;
+        return t < peak ? t / peak : 1 - (t - peak) / (1 - peak);
+      };
+    default:
+      return (t) => Math.min(1, t);
+  }
+}
+
 function updateText() {
   if (!currentFont) return;
 
-  // Dispose previous
+  // Dispose previous (geometry + per-instance materials like bevel caps)
   while (textGroup.children.length) {
     const c = textGroup.children.pop();
     if (c.geometry) c.geometry.dispose();
+    // Bevel-cap meshes use a cloned material; the shared body/outline materials
+    // are reused across rebuilds, so only dispose materials marked as cap.
+    if (c.userData && c.userData.disposableMaterial && c.material && c.material.dispose) {
+      c.material.dispose();
+    }
   }
 
   // Main body
@@ -490,28 +978,17 @@ function updateText() {
       textGroup.add(om);
     }
 
-    // Inner bevel (chiseled cap)
-    if (state.innerBevel && state.innerBevelHeight > 0 && state.innerBevelInset > 0) {
-      const cap = new TextGeometry(state.text || ' ', {
-        font: currentFont,
-        size: state.size,
-        depth: 0,
-        curveSegments: state.curveSegments,
-        bevelEnabled: true,
-        bevelThickness: state.innerBevelHeight,
-        bevelSize: state.innerBevelInset,
-        bevelOffset: 0,
-        bevelSegments: state.innerBevelSegments,
-      });
-      cap.computeBoundingBox();
-      const cbb = cap.boundingBox;
-      cap.translate(-(cbb.max.x + cbb.min.x) / 2, -(cbb.max.y + cbb.min.y) / 2, 0);
-      cap.computeVertexNormals();
-      const capMesh = new THREE.Mesh(cap, mat);
-      capMesh.position.z = bb.max.z + dz;
-      capMesh.castShadow = true; capMesh.receiveShadow = true;
-      if (mirror) { capMesh.scale.x = mirror.x ? -1 : 1; capMesh.scale.y = mirror.y ? -1 : 1; }
-      textGroup.add(capMesh);
+    // Inner bevel — Photoshop-style distance-field heightmap cap
+    if (state.innerBevel && state.innerBevelSize > 0 && state.innerBevelDepth > 0) {
+      const cap = buildInnerBevelCap(body);
+      if (cap) {
+        // Cap is built around origin in local space; place it on the front face.
+        cap.position.z = bb.max.z + dz + 0.0005;  // tiny epsilon to avoid z-fight
+        cap.castShadow = true;
+        cap.receiveShadow = true;
+        if (mirror) { cap.scale.x = mirror.x ? -1 : 1; cap.scale.y = mirror.y ? -1 : 1; }
+        textGroup.add(cap);
+      }
     }
   }
 
@@ -533,7 +1010,102 @@ function updateText() {
   updateStats();
 }
 
-// ============ MATERIAL UPDATE ============
+// ============ DECORATIONS ============
+// Stable per-instance "seeds" so animation looks consistent between rebuilds.
+function hashSeed(i, k = 0) {
+  return ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+}
+
+function rebuildDecorations() {
+  while (decorationsGroup.children.length) {
+    const c = decorationsGroup.children.pop();
+    if (c.geometry) c.geometry.dispose();
+    if (c.material && c.material.dispose) c.material.dispose();
+  }
+  if (state.decorationType === 'none' || state.decorationCount <= 0) return;
+
+  const def = DECORATIONS.find(d => d.id === state.decorationType);
+  if (!def || !def.make) return;
+
+  const baseGeom = def.make();
+  if (!baseGeom) return;
+
+  // Material — we use one PBR for all instances (instanced is overkill here
+  // because counts are small).
+  const m = new THREE.MeshPhysicalMaterial({
+    color: state.decorationColor,
+    metalness: def.glassy ? 0.0 : state.decorationMetalness,
+    roughness: def.glassy ? 0.05 : state.decorationRoughness,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.1,
+    transmission: def.glassy ? 0.85 : 0,
+    ior: def.glassy ? 1.5 : 1.5,
+    thickness: def.glassy ? 0.3 : 0.5,
+    emissive: state.decorationEmissive > 0 ? state.decorationColor : '#000000',
+    emissiveIntensity: state.decorationEmissive,
+    envMapIntensity: 1.5,
+  });
+
+  // Layout: ring around text. textGroup gets centered at origin so we orbit
+  // the origin at radius based on `decorationSpread`.
+  const N = state.decorationCount;
+  const radius = state.decorationSpread;
+
+  for (let i = 0; i < N; i++) {
+    const mesh = new THREE.Mesh(baseGeom, m);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.scale.setScalar(state.decorationScale * (0.85 + hashSeed(i, 1) * 0.3));
+
+    if (def.id === 'chain' && def.ring) {
+      // Lay out chain links along a circle, each link rotated 90° from neighbour
+      const a = (i / N) * Math.PI * 2;
+      mesh.position.set(Math.cos(a) * radius, Math.sin(a) * radius * 0.55, 0);
+      mesh.rotation.z = a + Math.PI / 2;
+      mesh.rotation.y = (i % 2) ? 0 : Math.PI / 2;  // alternating link orientation
+    } else {
+      // Random points on a sphere shell (slightly elongated horizontally)
+      const a = (i / N) * Math.PI * 2 + hashSeed(i, 2) * 0.5;
+      const elevation = (hashSeed(i, 3) - 0.5) * Math.PI * 0.7;
+      const r = radius * (0.8 + hashSeed(i, 4) * 0.4);
+      mesh.position.set(
+        Math.cos(a) * Math.cos(elevation) * r * 1.4,
+        Math.sin(elevation) * r,
+        Math.sin(a) * Math.cos(elevation) * r * 0.6 - 0.3
+      );
+      mesh.rotation.set(
+        hashSeed(i, 5) * Math.PI * 2,
+        hashSeed(i, 6) * Math.PI * 2,
+        hashSeed(i, 7) * Math.PI * 2
+      );
+    }
+
+    // Save initial position/rotation for animation
+    mesh.userData.basePos = mesh.position.clone();
+    mesh.userData.baseRot = mesh.rotation.clone();
+    mesh.userData.seed = i;
+    decorationsGroup.add(mesh);
+  }
+}
+
+function animateDecorations(dt, totalT) {
+  if (state.decorationType === 'none') return;
+  decorationsGroup.children.forEach((mesh) => {
+    const i = mesh.userData.seed || 0;
+    if (state.decorationFloat) {
+      const phase = hashSeed(i, 11) * Math.PI * 2;
+      mesh.position.y = mesh.userData.basePos.y + Math.sin(totalT * 1.2 + phase) * 0.08;
+    }
+    if (state.decorationSpinIndividual) {
+      const sx = (hashSeed(i, 12) - 0.5) * 1.5;
+      const sy = (hashSeed(i, 13) - 0.5) * 1.5 + 0.8;
+      mesh.rotation.x = mesh.userData.baseRot.x + totalT * sx;
+      mesh.rotation.y = mesh.userData.baseRot.y + totalT * sy;
+    }
+  });
+}
+
+
 function applyMaterial() {
   // PBR
   pbrMaterial.color.set(state.color);
@@ -570,6 +1142,23 @@ function applyMaterial() {
 
   // Outline
   outlineMaterial.color.set(state.outlineColor);
+
+  // Bevel-cap material clones — keep them in sync with the body's material.
+  textGroup.traverse((obj) => {
+    if (obj.isMesh && obj.userData && obj.userData.disposableMaterial && obj.material) {
+      const m = obj.material;
+      if (m.color) m.color.set(state.color);
+      if ('roughness' in m) m.roughness = state.roughness;
+      if ('metalness' in m) m.metalness = state.metalness;
+      if ('clearcoat' in m) m.clearcoat = state.clearcoat;
+      if ('clearcoatRoughness' in m) m.clearcoatRoughness = state.clearcoatRoughness;
+      if ('reflectivity' in m) m.reflectivity = state.reflectivity;
+      if ('emissive' in m) m.emissive.set(state.emissive);
+      if ('emissiveIntensity' in m) m.emissiveIntensity = state.emissiveIntensity;
+      if ('envMapIntensity' in m) m.envMapIntensity = state.envIntensity * 1.25;
+      m.needsUpdate = true;
+    }
+  });
 }
 
 // ============ HDRI / BACKGROUND ============
@@ -815,18 +1404,47 @@ function buildPanel() {
       b.appendChild(makeSlider('Bevel Segments', 'bevelSegments', 1, 16, 1, true));
     }
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
-    b.appendChild(makeToggle('Inner Bevel', 'innerBevel', 'Граненая поверхность (огранка / резьба)'));
+    b.appendChild(makeToggle('Inner Bevel', 'innerBevel', 'Photoshop-style Bevel & Emboss'));
     if (state.innerBevel) {
-      b.appendChild(makeSlider('Ridge Height', 'innerBevelHeight', 0.005, 0.4, 0.005));
-      b.appendChild(makeSlider('Ridge Inset', 'innerBevelInset', 0.005, 0.5, 0.005));
-      b.appendChild(makeSlider('Sharpness', 'innerBevelSegments', 1, 8, 1, true));
-      const chiselBtn = el('button', { class: 'btn-secondary', type: 'button' }, ['Chisel It (preset)']);
-      chiselBtn.addEventListener('click', () => {
-        pushUndo();
-        Object.assign(state, { innerBevelHeight: 0.08, innerBevelInset: 0.18, innerBevelSegments: 1, bevelEnabled: false });
-        buildPanel(); updateText();
+      b.appendChild(makeSelect('Style', 'innerBevelStyle', [
+        { value: 'chiselHard', label: '⚔ Chisel Hard (sharp)' },
+        { value: 'chiselSoft', label: '⚒ Chisel Soft' },
+        { value: 'smooth',     label: '◐ Smooth (rounded)' },
+        { value: 'pillow',     label: '☁ Pillow' },
+        { value: 'stroke',     label: '⌖ Stroke (thin ridge)' },
+      ]));
+      b.appendChild(makeSelect('Direction', 'innerBevelDirection', [
+        { value: 'up',   label: '▲ Up (raised)' },
+        { value: 'down', label: '▼ Down (engraved)' },
+      ]));
+      b.appendChild(makeSlider('Depth', 'innerBevelDepth', 0.05, 2, 0.01));
+      b.appendChild(makeSlider('Size', 'innerBevelSize', 0.005, 0.3, 0.005));
+      b.appendChild(makeSlider('Soften', 'innerBevelSoften', 0, 1, 0.01));
+      b.appendChild(makeSlider('Quality', 'innerBevelResolution', 128, 1024, 32, true));
+      b.appendChild(el('p', { class: 'hint' }, ['Soften = 0 → razor-sharp ridge. Higher Quality = sharper edges (slower).']));
+
+      // Quick presets
+      const presets = [
+        { name: 'Sharp Chisel', vals: { innerBevelStyle: 'chiselHard', innerBevelSoften: 0, innerBevelDepth: 1.0, innerBevelSize: 0.06 } },
+        { name: 'Carved Stone', vals: { innerBevelStyle: 'chiselHard', innerBevelSoften: 0.1, innerBevelDepth: 0.7, innerBevelSize: 0.10 } },
+        { name: 'Soft Plastic', vals: { innerBevelStyle: 'smooth', innerBevelSoften: 0.5, innerBevelDepth: 0.5, innerBevelSize: 0.10 } },
+        { name: 'Pillow',       vals: { innerBevelStyle: 'pillow', innerBevelSoften: 0.3, innerBevelDepth: 0.6, innerBevelSize: 0.12 } },
+        { name: 'Engraved',     vals: { innerBevelStyle: 'chiselHard', innerBevelDirection: 'down', innerBevelSoften: 0, innerBevelDepth: 0.8, innerBevelSize: 0.05 } },
+        { name: 'Outline Edge', vals: { innerBevelStyle: 'stroke', innerBevelSoften: 0, innerBevelDepth: 0.6, innerBevelSize: 0.04 } },
+      ];
+      const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+      presets.forEach(p => {
+        const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center;' });
+        btn.textContent = p.name;
+        btn.addEventListener('click', () => {
+          pushUndo();
+          Object.assign(state, p.vals);
+          buildPanel(); updateText();
+        });
+        grid.appendChild(btn);
       });
-      b.appendChild(chiselBtn);
+      b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider pt-2' }, ['Bevel Presets']));
+      b.appendChild(grid);
     }
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
     b.appendChild(makeToggle('Mirror X', 'mirrorX', 'Зеркально отразить по X'));
@@ -910,6 +1528,54 @@ function buildPanel() {
     }
   }, { collapsed: true }));
 
+  // ========== DECORATIONS (3D items around the text) ==========
+  panel.appendChild(makeSection('decorations', '🎁 3D Decorations', '🎁', (b) => {
+    b.appendChild(makeSelect('Type', 'decorationType',
+      DECORATIONS.map(d => ({ value: d.id, label: d.name }))
+    ));
+    if (state.decorationType !== 'none') {
+      b.appendChild(makeSlider('Count', 'decorationCount', 1, 60, 1, true));
+      b.appendChild(makeSlider('Scale', 'decorationScale', 0.2, 3, 0.05));
+      b.appendChild(makeSlider('Spread', 'decorationSpread', 0.5, 5, 0.05));
+      b.appendChild(makeColor('Color', 'decorationColor'));
+      b.appendChild(makeSlider('Metalness', 'decorationMetalness', 0, 1, 0.01));
+      b.appendChild(makeSlider('Roughness', 'decorationRoughness', 0, 1, 0.01));
+      b.appendChild(makeSlider('Glow', 'decorationEmissive', 0, 4, 0.05));
+      b.appendChild(makeToggle('Float Animation', 'decorationFloat'));
+      b.appendChild(makeToggle('Spin Each Item', 'decorationSpinIndividual'));
+    }
+
+    // Quick "vibe" presets — combinations that look great
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Vibe Presets']));
+    const vibes = [
+      { name: '⭐ Stardust',       vals: { decorationType: 'star',    decorationCount: 24, decorationColor: '#ffe066', decorationEmissive: 1.5, decorationScale: 0.7, decorationSpread: 2.4 } },
+      { name: '✦ Sparkle Magic',   vals: { decorationType: 'sparkle', decorationCount: 30, decorationColor: '#ffffff', decorationEmissive: 2.5, decorationScale: 0.6, decorationSpread: 2.2 } },
+      { name: '♫ Music Vibes',     vals: { decorationType: 'note2',   decorationCount: 12, decorationColor: '#a855f7', decorationEmissive: 0.4, decorationScale: 1.0, decorationSpread: 2.5 } },
+      { name: '❤ Love',            vals: { decorationType: 'heart',   decorationCount: 18, decorationColor: '#ff5e9c', decorationEmissive: 0.3, decorationScale: 0.7, decorationSpread: 2.2 } },
+      { name: '⛓ Chained',         vals: { decorationType: 'chain',   decorationCount: 28, decorationColor: '#c8c8c8', decorationMetalness: 1, decorationRoughness: 0.2, decorationScale: 0.9, decorationSpread: 2.8 } },
+      { name: '👑 Royal',          vals: { decorationType: 'crown',   decorationCount: 6,  decorationColor: '#ffd166', decorationMetalness: 1, decorationRoughness: 0.15, decorationScale: 0.9, decorationSpread: 2.8 } },
+      { name: '⚡ Electric',       vals: { decorationType: 'bolt',    decorationCount: 14, decorationColor: '#7dd3fc', decorationEmissive: 2.5, decorationScale: 0.8, decorationSpread: 2.4 } },
+      { name: '💎 Diamonds',       vals: { decorationType: 'diamond', decorationCount: 16, decorationColor: '#bae6fd', decorationScale: 0.6, decorationSpread: 2.4 } },
+      { name: '🔥 Fire Ring',      vals: { decorationType: 'flame',   decorationCount: 16, decorationColor: '#ff6a00', decorationEmissive: 3.0, decorationScale: 0.8, decorationSpread: 2.2 } },
+      { name: '○ Bubbles',         vals: { decorationType: 'bubble',  decorationCount: 22, decorationColor: '#bae6fd', decorationScale: 0.6, decorationSpread: 2.2 } },
+      { name: '@ Galaxy Spirals',  vals: { decorationType: 'spiral',  decorationCount: 8,  decorationColor: '#a855f7', decorationEmissive: 1.0, decorationScale: 1.2, decorationSpread: 2.5 } },
+      { name: '○ Saturn Rings',    vals: { decorationType: 'ring',    decorationCount: 5,  decorationColor: '#ffd166', decorationMetalness: 1, decorationScale: 1.3, decorationSpread: 2.4 } },
+    ];
+    const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+    vibes.forEach(v => {
+      const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center;' });
+      btn.textContent = v.name;
+      btn.addEventListener('click', () => {
+        pushUndo();
+        Object.assign(state, v.vals);
+        buildPanel(); rebuildDecorations();
+      });
+      grid.appendChild(btn);
+    });
+    b.appendChild(grid);
+  }));
+
   // ========== ENVIRONMENT ==========
   panel.appendChild(makeSection('environment', 'Environment', '◯', (b) => {
     b.appendChild(makeSelect('Background', 'bgMode', [
@@ -973,19 +1639,61 @@ function buildPanel() {
     }
   }, { collapsed: true }));
 
-  // ========== POST-PROCESSING ==========
-  panel.appendChild(makeSection('post', 'Post-Processing', '✶', (b) => {
-    b.appendChild(makeToggle('Bloom', 'bloomOn', 'Glow effect on bright pixels'));
+  // ========== BLOOM (its own dedicated section) ==========
+  panel.appendChild(makeSection('bloom', '✨ Bloom', '✨', (b) => {
+    b.appendChild(makeToggle('Enable Bloom', 'bloomOn', 'Светящееся свечение на ярких пикселях'));
     if (state.bloomOn) {
-      b.appendChild(makeSlider('Strength', 'bloomStrength', 0, 3, 0.05));
+      b.appendChild(makeSlider('Strength', 'bloomStrength', 0, 4, 0.05));
       b.appendChild(makeSlider('Threshold', 'bloomThreshold', 0, 1, 0.01));
       b.appendChild(makeSlider('Radius', 'bloomRadius', 0, 1.5, 0.05));
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(makeColor('Bloom Color', 'bloomColor'));
+      b.appendChild(makeSlider('Color Mix', 'bloomColorMix', 0, 1, 0.02));
+      b.appendChild(el('p', { class: 'hint' }, ['Color Mix > 0 окрашивает свечение в выбранный цвет.']));
     }
+
+    // Presets
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Bloom Presets']));
+    const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+    BLOOM_PRESETS.forEach(p => {
+      const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center;' });
+      const swatch = (p.vals.bloomColor || '#ffffff');
+      btn.innerHTML = `<span class="preset-swatch" style="background:${swatch}"></span><span class="truncate">${p.name}</span>`;
+      btn.addEventListener('click', () => {
+        pushUndo();
+        // Reset extras then apply preset
+        Object.assign(state, {
+          chromaticOn: false, vignetteOn: false, grainOn: false,
+          bloomOn: true,
+        });
+        Object.assign(state, p.vals);
+        buildPanel(); applyMaterial(); updatePostProcessing();
+      });
+      grid.appendChild(btn);
+    });
+    b.appendChild(grid);
+
+    // Quick "off" button
+    const offBtn = el('button', { class: 'btn-secondary', type: 'button' }, ['Turn Off All Effects']);
+    offBtn.addEventListener('click', () => {
+      pushUndo();
+      Object.assign(state, { bloomOn: false, chromaticOn: false, vignetteOn: false, grainOn: false });
+      buildPanel(); updatePostProcessing();
+    });
+    b.appendChild(offBtn);
+  }));
+
+  // ========== EXTRA EFFECTS ==========
+  panel.appendChild(makeSection('post', 'Extra Effects', '✶', (b) => {
     b.appendChild(makeToggle('Vignette', 'vignetteOn'));
-    if (state.vignetteOn) {
-      b.appendChild(makeSlider('Intensity', 'vignetteIntensity', 0, 1, 0.02));
-    }
+    if (state.vignetteOn) b.appendChild(makeSlider('Intensity', 'vignetteIntensity', 0, 1, 0.02));
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(makeToggle('Chromatic Aberration', 'chromaticOn', 'RGB-сдвиг по краям (как у анаморфных линз)'));
+    if (state.chromaticOn) b.appendChild(makeSlider('Amount', 'chromaticAmount', 0, 0.02, 0.0005));
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(makeToggle('Film Grain', 'grainOn', 'Кинематографическое зерно'));
+    if (state.grainOn) b.appendChild(makeSlider('Amount', 'grainAmount', 0, 0.3, 0.005));
   }, { collapsed: true }));
 
   // ========== CAMERA ==========
@@ -1090,7 +1798,8 @@ function buildPanel() {
 const GEOMETRY_KEYS = new Set([
   'text', 'size', 'depth', 'curveSegments',
   'bevelEnabled', 'bevelThickness', 'bevelSize', 'bevelOffset', 'bevelSegments',
-  'innerBevel', 'innerBevelHeight', 'innerBevelInset', 'innerBevelSegments',
+  'innerBevel', 'innerBevelStyle', 'innerBevelDepth', 'innerBevelSize',
+  'innerBevelSoften', 'innerBevelDirection', 'innerBevelResolution',
   'mirrorX', 'mirrorY', 'outlineOn', 'outlineThickness',
   'letterSpacing', 'lineHeight', 'shadingMode', 'matcapId',
 ]);
@@ -1106,7 +1815,7 @@ const MATERIAL_KEYS = new Set([
 function handleChange(key) {
   if (key === 'fontId') { setActiveFont().then(updateHud); return; }
   if (GEOMETRY_KEYS.has(key)) {
-    const rebuild = ['bevelEnabled', 'innerBevel', 'shadingMode', 'outlineOn'].includes(key);
+    const rebuild = ['bevelEnabled', 'innerBevel', 'innerBevelStyle', 'innerBevelDirection', 'shadingMode', 'outlineOn'].includes(key);
     if (rebuild) buildPanel();
     if (['flatShading', 'wireframe', 'matcapId'].includes(key)) applyMaterial();
     updateText();
@@ -1137,8 +1846,22 @@ function handleChange(key) {
     controls.autoRotateSpeed = state.autoRotateSpeed * 2;
   }
 
-  if (['bloomOn', 'bloomStrength', 'bloomThreshold', 'bloomRadius', 'vignetteOn', 'vignetteIntensity'].includes(key)) {
+  if (['bloomOn', 'bloomStrength', 'bloomThreshold', 'bloomRadius',
+       'bloomColor', 'bloomColorMix',
+       'vignetteOn', 'vignetteIntensity',
+       'chromaticOn', 'chromaticAmount',
+       'grainOn', 'grainAmount'].includes(key)) {
+    if (['bloomOn', 'vignetteOn', 'chromaticOn', 'grainOn'].includes(key)) buildPanel();
     updatePostProcessing();
+  }
+
+  // Decorations
+  if (key === 'decorationType') buildPanel();
+  if ([
+    'decorationType', 'decorationCount', 'decorationScale', 'decorationSpread',
+    'decorationColor', 'decorationMetalness', 'decorationRoughness', 'decorationEmissive',
+  ].includes(key)) {
+    rebuildDecorations();
   }
 
   if (key === 'showStats') {
@@ -1194,9 +1917,22 @@ function updatePostProcessing() {
     bloomPass.threshold = state.bloomThreshold;
     bloomPass.radius = state.bloomRadius;
   }
+  if (bloomTintPass) {
+    bloomTintPass.enabled = state.bloomOn && state.bloomColorMix > 0;
+    bloomTintPass.uniforms.tintColor.value.set(state.bloomColor);
+    bloomTintPass.uniforms.mixAmount.value = state.bloomColorMix;
+  }
+  if (chromaticPass) {
+    chromaticPass.enabled = state.chromaticOn;
+    chromaticPass.uniforms.amount.value = state.chromaticAmount;
+  }
   if (vignettePass) {
     vignettePass.enabled = state.vignetteOn;
     vignettePass.uniforms.intensity.value = state.vignetteIntensity;
+  }
+  if (grainPass) {
+    grainPass.enabled = state.grainOn;
+    grainPass.uniforms.amount.value = state.grainAmount;
   }
 }
 
@@ -1336,6 +2072,7 @@ function applyAllChanges() {
   updateCamera();
   updatePostProcessing();
   applyAnimationMode();
+  rebuildDecorations();
   controls.autoRotate = state.autoRotate;
   controls.autoRotateSpeed = state.autoRotateSpeed * 2;
   document.getElementById('statsOverlay').style.display = state.showStats ? 'flex' : 'none';
@@ -1433,17 +2170,25 @@ function resize() {
 // ============ ANIMATION LOOP ============
 const clock = new THREE.Clock();
 let animTime = 0;
+let totalTime = 0;
 let fpsCounter = { last: performance.now(), frames: 0, fps: 0 };
 
 function animate() {
   requestAnimationFrame(animate);
   resize();
   const dt = clock.getDelta();
+  totalTime += dt;
   const mode = ANIMATIONS.find((a) => a.id === state.animationMode);
   if (mode && mode.apply) {
     animTime += dt * state.animationSpeed;
     mode.apply(textGroup, animTime);
   }
+  // Decorations animation (independent of the text animation mode)
+  animateDecorations(dt, totalTime);
+
+  // Update grain shader time uniform so noise actually moves
+  if (grainPass) grainPass.uniforms.time.value = totalTime;
+
   controls.update();
 
   // Render gradient first if needed
@@ -1481,6 +2226,9 @@ function animate() {
 
 // ============ INIT ============
 async function init() {
+  // Pre-load BufferGeometryUtils so multi-part decorations (notes, crown)
+  // merge synchronously on first render.
+  await getBufferGeometryUtils();
   buildPanel();
   applyMaterial();
   ground.visible = state.showShadows;
@@ -1496,6 +2244,7 @@ async function init() {
   document.getElementById('statsOverlay').style.display = state.showStats ? 'flex' : 'none';
   await loadHDRI(state.envPreset);
   await setActiveFont();
+  rebuildDecorations();
   updateHud();
   loadingOverlay.style.display = 'none';
   animate();
