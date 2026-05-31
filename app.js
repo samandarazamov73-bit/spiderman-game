@@ -1000,6 +1000,7 @@ const DEFAULTS = {
   textLiveReflections: false,
   textLiveReflectionStrength: 1.5,
   textLiveReflectionEvery: 1,    // 1 = every frame, 2 = every other frame, ...
+  textLiveReflectionRes: 1024,   // 256 / 512 / 1024 / 2048 — higher = sharper mirror
 
   // Animation
   autoRotate: false,           // simple toggle (back-compat)
@@ -1205,17 +1206,31 @@ pmrem.compileEquirectangularShader();
 // ============ LIVE SCENE REFLECTIONS (CubeCamera) ============
 // A small CubeCamera sits at the centre of the text. Once per frame (when
 // reflections are enabled) we hide the text itself, render the rest of the
-// scene into a 256² cube render target from that point, then assign that
+// scene into a high-res cube render target from that point, then assign that
 // target as the text material's envMap. The result: the text's surface
 // shows a LIVE reflection of the spinning chain / decorations / HDRI / floor
 // — like a real polished window on the letters' surface.
-const reflectionRT = new THREE.WebGLCubeRenderTarget(256, {
-  generateMipmaps: true,
-  minFilter: THREE.LinearMipmapLinearFilter,
-  type: THREE.HalfFloatType,
-});
-const reflectionCubeCamera = new THREE.CubeCamera(0.1, 60, reflectionRT);
-scene.add(reflectionCubeCamera);
+//
+// QUALITY: 1024² with linear mipmap chain + HalfFloat = mirror-grade
+// reflections. The CubeRenderTarget can't take an MSAA `samples` option in
+// three.js (cube targets aren't multisampled at the WebGL2 spec level), but
+// the high resolution + linear filtering eliminates visible aliasing.
+let reflectionRT = null;
+let reflectionCubeCamera = null;
+function buildReflectionRig(resolution) {
+  if (reflectionRT) reflectionRT.dispose();
+  if (reflectionCubeCamera && reflectionCubeCamera.parent) reflectionCubeCamera.parent.remove(reflectionCubeCamera);
+  reflectionRT = new THREE.WebGLCubeRenderTarget(resolution, {
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter,
+    magFilter: THREE.LinearFilter,
+    type: THREE.HalfFloatType,
+    anisotropy: renderer.capabilities.getMaxAnisotropy(),
+  });
+  reflectionCubeCamera = new THREE.CubeCamera(0.1, 60, reflectionRT);
+  scene.add(reflectionCubeCamera);
+}
+buildReflectionRig(1024);
 let _hdriEnvTexture = null;        // last loaded HDRI envmap (used as fallback)
 let _reflectionFrame = 0;          // render the cube every Nth frame for perf
 
@@ -2833,8 +2848,42 @@ function buildPanel() {
       if (state.textLiveReflections) {
         b.appendChild(makeSlider('Reflection Strength', 'textLiveReflectionStrength', 0, 4, 0.05));
         b.appendChild(makeSlider('Update Every N Frames', 'textLiveReflectionEvery', 1, 6, 1, true));
+        // Quality / resolution — higher = sharper mirror, more GPU.
+        b.appendChild(makeSelect('Quality', 'textLiveReflectionRes', [
+          { value: 256,  label: '256² (fast)' },
+          { value: 512,  label: '512² (good)' },
+          { value: 1024, label: '1024² (mirror) ⭐' },
+          { value: 2048, label: '2048² (ultra)' },
+        ]));
+
+        // One-click presets that flip the right material flags for a
+        // perfect mirror or clean glass look.
+        b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+        b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Material Presets']));
+        const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+        const fxPresets = [
+          { name: '🪞 Perfect Mirror', vals: { metalness: 1, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, transmission: 0, color: '#ffffff', textLiveReflectionStrength: 2.5, textLiveReflectionRes: 1024 } },
+          { name: '🪟 Clean Glass',    vals: { metalness: 0, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, transmission: 1, ior: 1.5, thickness: 0.6, color: '#ffffff', textLiveReflectionStrength: 1.6, textLiveReflectionRes: 1024 } },
+          { name: '✨ Chrome',         vals: { metalness: 1, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02, transmission: 0, color: '#ffffff', textLiveReflectionStrength: 2.2, textLiveReflectionRes: 1024 } },
+          { name: '💎 Crystal',        vals: { metalness: 0, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, transmission: 0.85, ior: 1.5, thickness: 0.4, color: '#bae6fd', textLiveReflectionStrength: 1.4, textLiveReflectionRes: 1024 } },
+        ];
+        fxPresets.forEach((p) => {
+          const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center;' });
+          btn.textContent = p.name;
+          btn.addEventListener('click', () => {
+            pushUndo();
+            Object.assign(state, p.vals);
+            buildPanel();
+            applyMaterial();
+            // Quality change also rebuilds the cube target.
+            buildReflectionRig(state.textLiveReflectionRes);
+          });
+          grid.appendChild(btn);
+        });
+        b.appendChild(grid);
+
         b.appendChild(el('p', { class: 'hint' }, [
-          'Higher "Update Every" = better FPS, less smooth reflection animation. Use Roughness ≈ 0 + Metalness 1 for the cleanest mirror look.',
+          '🪞 Perfect Mirror: metalness=1, roughness=0. 🪟 Clean Glass: transmission=1, roughness=0. Quality 1024² — это уровень настоящего полированного стекла. 2048² для ультра-чёткости (медленнее).',
         ]));
       }
     }
@@ -3506,6 +3555,17 @@ function handleChange(key) {
   }
   if (key === 'envPreset') { loadHDRI(state.envPreset); updateHud(); }
   if (key === 'textLiveReflections') buildPanel();
+  if (key === 'textLiveReflectionRes') {
+    // Resolution change: rebuild the cube render target. The makeSelect
+    // helper stores values as strings, so coerce back to int first.
+    state.textLiveReflectionRes = parseInt(state.textLiveReflectionRes, 10) || 1024;
+    buildReflectionRig(state.textLiveReflectionRes);
+    // Force the next frame to refresh and re-bind the new texture.
+    if (pbrMaterial.envMap) {
+      pbrMaterial.envMap = null;
+      pbrMaterial.needsUpdate = true;
+    }
+  }
   if (key === 'envIntensity') applyMaterial();
   if (key === 'showShadows') ground.visible = state.showShadows;
   if (key === 'showGrid') gridHelper.visible = state.showGrid;
