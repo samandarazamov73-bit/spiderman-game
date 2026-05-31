@@ -672,6 +672,49 @@ const DECORATIONS = [
   ...DECORATION_CATEGORIES.flatMap(cat => cat.items),
 ];
 
+// ============ NECKLACE STYLES ============
+// 16 chain styles — each defines a function that builds one repeated link
+// + an optional pendant centerpiece. The factory functions below produce
+// small geometries that get instanced around a circle by buildNecklace().
+function makeLinkOval()       { return new THREE.TorusGeometry(0.18, 0.05, 12, 24); }
+function makeLinkRound()      { return new THREE.TorusGeometry(0.16, 0.06, 14, 28); }
+function makeLinkBead()       { return new THREE.SphereGeometry(0.13, 16, 12); }
+function makeLinkPearl()      { const g = new THREE.SphereGeometry(0.14, 20, 14); return g; }
+function makeLinkBox()        { return new THREE.BoxGeometry(0.20, 0.10, 0.10); }
+function makeLinkOctaSmall()  { return new THREE.OctahedronGeometry(0.13, 0); }
+function makeLinkSpike()      { return new THREE.ConeGeometry(0.07, 0.25, 8); }
+function makeLinkRice()       { const g = new THREE.SphereGeometry(0.10, 12, 10); g.scale(2.0, 1.0, 1.0); return g; }
+function makeLinkDisc()       { const g = new THREE.CylinderGeometry(0.13, 0.13, 0.04, 24); g.rotateX(Math.PI/2); return g; }
+function makeLinkSquareLink() { return new THREE.TorusGeometry(0.16, 0.05, 4, 4); /* low segs = square ring */ }
+function makeLinkCubeRot()    { const g = new THREE.BoxGeometry(0.16, 0.16, 0.16); return g; }
+function makeLinkHeart()      { return makeHeartGeom(); }
+function makeLinkStar()       { return makeStarGeom(); }
+function makeLinkSparkle()    { return makeSparkleGeom(); }
+function makeLinkBolt()       { return makeBoltGeom(); }
+function makeLinkRose()       { return makeRosePetalGeom(); }
+
+const NECKLACE_STYLES = [
+  { id: 'none',       name: '— None —' },
+  { id: 'oval',       name: '🟡 Classic Oval Chain',    make: makeLinkOval,       linkRotEachZ: Math.PI/2 },
+  { id: 'round',      name: '◯ Round Cable Chain',      make: makeLinkRound,      linkRotEachZ: 0 },
+  { id: 'figaro',     name: '⛓ Figaro Chain',           make: makeLinkOval,       linkRotEachZ: Math.PI/2, varyEvery: 3, variantScale: 1.6 },
+  { id: 'box',        name: '◻ Box Chain',              make: makeLinkBox,        linkRotEachZ: 0 },
+  { id: 'rope',       name: '🪢 Rope (alternating)',     make: makeLinkOval,       linkRotEachZ: Math.PI/4, alternate: true },
+  { id: 'beads',      name: '⚫ Bead Necklace',         make: makeLinkBead,       linkRotEachZ: 0, scale: 1.0 },
+  { id: 'pearls',     name: '🦪 Pearl Strand',          make: makeLinkPearl,      linkRotEachZ: 0, scale: 1.05, pearlMat: true },
+  { id: 'spikes',     name: '🗿 Spike Choker',          make: makeLinkSpike,      linkRotEachZ: 0, spikeOut: true },
+  { id: 'rice',       name: '🌾 Rice Chain',            make: makeLinkRice,       linkRotEachZ: 0 },
+  { id: 'disc',       name: '⏺ Disc Chain',             make: makeLinkDisc,       linkRotEachZ: 0 },
+  { id: 'octa',       name: '◊ Octahedron Beads',       make: makeLinkOctaSmall,  linkRotEachZ: 0 },
+  { id: 'cubes',      name: '🎲 Cube Chain',            make: makeLinkCubeRot,    linkRotEachZ: 0 },
+  { id: 'hearts',     name: '❤ Heart Chain',            make: makeLinkHeart,      linkRotEachZ: 0, scale: 0.45 },
+  { id: 'stars',      name: '⭐ Star Chain',            make: makeLinkStar,       linkRotEachZ: 0, scale: 0.5 },
+  { id: 'sparkles',   name: '✦ Sparkle Necklace',       make: makeLinkSparkle,    linkRotEachZ: 0, scale: 0.55, glowDefault: 1.5 },
+  { id: 'bolts',      name: '⚡ Lightning Chain',        make: makeLinkBolt,       linkRotEachZ: 0, scale: 0.5, glowDefault: 1.5 },
+  { id: 'flower',     name: '🌹 Petal Chain',           make: makeLinkRose,       linkRotEachZ: 0, scale: 0.5 },
+  { id: 'square',     name: '⬜ Square Link Chain',      make: makeLinkSquareLink, linkRotEachZ: Math.PI/2 },
+];
+
 // ============ DEFAULTS / STATE ============
 const DEFAULTS = {
   // Text
@@ -817,6 +860,22 @@ const DEFAULTS = {
   decorationFloat: true,       // gentle bobbing animation
   decorationSpinIndividual: true,
 
+  // Necklace / Chain — circular ring of links surrounding the text. Has its
+  // own dedicated controls so it can coexist with other 3D Decorations.
+  necklaceStyle: 'none',       // 'none' | one of NECKLACE_STYLES.id
+  necklaceColor: '#ffd166',
+  necklaceMetalness: 1.0,
+  necklaceRoughness: 0.2,
+  necklaceEmissive: 0,
+  necklaceLinkCount: 32,
+  necklaceRadius: 2.4,
+  necklaceLinkSize: 1.0,
+  necklaceTilt: 18,            // tilt of the chain plane (deg, X-axis)
+  necklaceSpin: true,
+  necklaceSpinSpeed: 0.6,
+  necklaceSpinDir: 1,          // +1 or -1 — clockwise or counter
+  necklaceWobble: false,       // gentle Y-axis figure-8 wobble
+
   // Animation
   autoRotate: false,           // simple toggle (back-compat)
   autoRotateSpeed: 1.2,
@@ -862,7 +921,7 @@ const RAIL_TABS = [
   { id: 'content',  icon: SVG_ICON.type,     title: 'Content',         sections: ['text', 'typography'] },
   { id: 'shape',    icon: SVG_ICON.shape,    title: 'Geometry & Material', sections: ['geometry', 'material', 'material-extras', 'outline'] },
   { id: 'effects',  icon: SVG_ICON.effects,  title: 'Effects',         sections: ['bloom', 'post', 'layereffects'] },
-  { id: 'decorate', icon: SVG_ICON.decorate, title: 'Decorations',     sections: ['decorations', 'particles'] },
+  { id: 'decorate', icon: SVG_ICON.decorate, title: 'Decorations',     sections: ['decorations', 'necklace', 'particles'] },
   { id: 'scene',    icon: SVG_ICON.scene,    title: 'Scene & Camera',  sections: ['environment', 'lighting', 'floor', 'camera', 'animation'] },
   { id: 'project',  icon: SVG_ICON.project,  title: 'Export & Project', sections: ['templates', 'export', 'presets', 'stats'] },
 ];
@@ -994,6 +1053,13 @@ scene.add(textGroup);
 // Decorations group — orbiting/floating 3D items around the text.
 const decorationsGroup = new THREE.Group();
 scene.add(decorationsGroup);
+
+// Necklace group — circular chain that orbits the text in its own pivot.
+// Kept separate so it can rotate as a single unit independent of decorations.
+const necklacePivot = new THREE.Group();
+scene.add(necklacePivot);
+const necklaceRing = new THREE.Group();
+necklacePivot.add(necklaceRing);
 
 // ============ PARTICLES ============
 // One reusable Points object; geometry is rebuilt when type/count changes.
@@ -1928,13 +1994,26 @@ function animateDecorations(dt, totalT) {
   decorationsGroup.children.forEach((mesh) => {
     // Skip while user is currently dragging this item.
     if (mesh.userData.dragging) return;
-    // Pinned items keep their custom position/rotation (no float, no spin).
-    if (mesh.userData.pinned) return;
     const i = mesh.userData.seed || 0;
-    if (state.decorationFloat) {
+    const isPinned = !!mesh.userData.pinned;
+
+    // Float (vertical bob) — anchor on the CURRENT base position so toggling
+    // the float toggle off-then-on no longer snaps the item back to the
+    // procedural origin. Pinned items skip the bob entirely (they stay
+    // exactly where the user put them).
+    if (state.decorationFloat && !isPinned) {
       const phase = hashSeed(i, 11) * Math.PI * 2;
       mesh.position.y = mesh.userData.basePos.y + Math.sin(totalT * 1.2 + phase) * 0.08;
+    } else if (!isPinned) {
+      // Float disabled → snap mesh back to its base Y so the item doesn't
+      // freeze mid-bob at some random offset.
+      mesh.position.y = mesh.userData.basePos.y;
     }
+
+    // Per-item spin runs for ALL items, including pinned ones — being placed
+    // by hand should NOT freeze the rotation; the user just wants to control
+    // where the sticker SITS, not whether it rotates. (Old behaviour of
+    // freezing pinned items broke this expectation.)
     if (state.decorationSpinIndividual) {
       const sx = (hashSeed(i, 12) - 0.5) * 1.5;
       const sy = (hashSeed(i, 13) - 0.5) * 1.5 + 0.8;
@@ -2047,6 +2126,99 @@ function unpinAllDecorations() {
     m.userData.pinned = false;
     if (m.userData.basePos) m.position.copy(m.userData.basePos);
   });
+}
+
+// ============ NECKLACE / CHAIN ============
+function rebuildNecklace() {
+  // Tear down previous
+  while (necklaceRing.children.length) {
+    const c = necklaceRing.children.pop();
+    if (c.geometry) c.geometry.dispose();
+    if (c.material && c.material.dispose) c.material.dispose();
+  }
+  if (state.necklaceStyle === 'none') return;
+  const style = NECKLACE_STYLES.find((s) => s.id === state.necklaceStyle);
+  if (!style || !style.make) return;
+
+  const N = Math.max(4, Math.min(120, state.necklaceLinkCount));
+  const radius = state.necklaceRadius;
+  const baseScale = (style.scale || 1.0) * state.necklaceLinkSize;
+
+  // One shared material so colour/metalness/etc. updates are cheap.
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: state.necklaceColor,
+    metalness: style.pearlMat ? 0.05 : state.necklaceMetalness,
+    roughness: style.pearlMat ? 0.25 : state.necklaceRoughness,
+    clearcoat: style.pearlMat ? 1 : 0.4,
+    clearcoatRoughness: style.pearlMat ? 0.05 : 0.1,
+    iridescence: style.pearlMat ? 0.6 : 0,
+    emissive: state.necklaceEmissive > 0 ? state.necklaceColor : '#000000',
+    emissiveIntensity: state.necklaceEmissive,
+    envMapIntensity: 1.5,
+  });
+
+  const baseGeom = style.make();
+
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    // For 'figaro' style, every Nth link is bigger.
+    let s = baseScale;
+    if (style.varyEvery && i % style.varyEvery === 0) s = baseScale * (style.variantScale || 1.4);
+    const link = new THREE.Mesh(baseGeom, mat);
+    link.position.set(Math.cos(a) * radius, 0, Math.sin(a) * radius);
+    link.scale.setScalar(s);
+
+    // Orient link so it sits naturally along the ring tangent.
+    link.lookAt(0, 0, 0);
+    if (style.linkRotEachZ) link.rotateZ(style.linkRotEachZ);
+    // Alternate every other link by 90° around its tangent (rope effect).
+    if (style.alternate && i % 2) link.rotateY(Math.PI / 2);
+    // Spike chokers point outward.
+    if (style.spikeOut) {
+      link.lookAt(Math.cos(a) * radius * 2, 0, Math.sin(a) * radius * 2);
+      link.rotateX(Math.PI / 2);
+    }
+    link.castShadow = true;
+    link.receiveShadow = true;
+    necklaceRing.add(link);
+  }
+
+  // Material is owned by the ring — dispose when next rebuild empties children
+  // since we recreate it each time.
+  necklaceRing.userData.sharedMat = mat;
+  necklaceRing.userData.baseGeom = baseGeom;
+
+  // Apply tilt to the pivot so the chain sits at a natural neckline angle.
+  necklacePivot.rotation.x = THREE.MathUtils.degToRad(state.necklaceTilt);
+}
+
+function animateNecklace(dt, totalT) {
+  if (state.necklaceStyle === 'none') return;
+  if (state.necklaceSpin) {
+    necklaceRing.rotation.y += dt * state.necklaceSpinSpeed * state.necklaceSpinDir;
+  }
+  if (state.necklaceWobble) {
+    necklacePivot.rotation.z = Math.sin(totalT * 0.8) * 0.08;
+    necklacePivot.rotation.y = Math.sin(totalT * 0.5) * 0.15;
+  } else {
+    necklacePivot.rotation.z = 0;
+    necklacePivot.rotation.y = 0;
+  }
+}
+
+function applyNecklaceMaterial() {
+  const mat = necklaceRing.userData && necklaceRing.userData.sharedMat;
+  if (!mat) return;
+  mat.color.set(state.necklaceColor);
+  mat.metalness = state.necklaceMetalness;
+  mat.roughness = state.necklaceRoughness;
+  if (state.necklaceEmissive > 0) {
+    mat.emissive.set(state.necklaceColor);
+  } else {
+    mat.emissive.set('#000000');
+  }
+  mat.emissiveIntensity = state.necklaceEmissive;
+  mat.needsUpdate = true;
 }
 
 
@@ -2540,7 +2712,7 @@ function buildPanel() {
 
       b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
       b.appendChild(el('p', { class: 'hint' }, [
-        '✋ Drag items in the viewport to place them anywhere. Dragged items get pinned and stop floating.',
+        '✋ Drag items to place them. Pinned items still spin but stop bobbing — toggle Spin Each Item if you want them frozen too.',
       ]));
       const resetBtn = el('button', { class: 'btn-secondary', type: 'button' }, ['↺ Reset positions']);
       resetBtn.addEventListener('click', () => { unpinAllDecorations(); });
@@ -2745,6 +2917,104 @@ function buildPanel() {
     });
     b.appendChild(grid);
   }, { collapsed: true }));
+
+  // ========== NECKLACE / CHAIN ==========
+  addSection(makeSection('necklace', '⛓ Necklace / Chain', '⛓', (b) => {
+    b.appendChild(makeSelect('Style', 'necklaceStyle',
+      NECKLACE_STYLES.map((s) => ({ value: s.id, label: s.name }))
+    ));
+
+    if (state.necklaceStyle !== 'none') {
+      // Visual style swatches — pick a chain by clicking its tile.
+      const styleGrid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+      NECKLACE_STYLES.filter(s => s.id !== 'none').forEach((s) => {
+        const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:flex-start; padding:6px 10px;' });
+        if (state.necklaceStyle === s.id) { btn.style.background = 'rgba(99,102,241,0.18)'; btn.style.color = '#a5a7f5'; }
+        btn.textContent = s.name;
+        btn.addEventListener('click', () => {
+          pushUndo();
+          state.necklaceStyle = s.id;
+          buildPanel();
+          rebuildNecklace();
+        });
+        styleGrid.appendChild(btn);
+      });
+      b.appendChild(styleGrid);
+
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(makeSlider('Links',         'necklaceLinkCount', 6, 120, 1, true));
+      b.appendChild(makeSlider('Radius',        'necklaceRadius',    1.0, 6.0, 0.05));
+      b.appendChild(makeSlider('Link Size',     'necklaceLinkSize',  0.4, 3.0, 0.05));
+      b.appendChild(makeSlider('Tilt (deg)',    'necklaceTilt',     -60, 60, 1, true));
+
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(makeColor('Color', 'necklaceColor'));
+      b.appendChild(makeSlider('Metalness', 'necklaceMetalness', 0, 1, 0.01));
+      b.appendChild(makeSlider('Roughness', 'necklaceRoughness', 0, 1, 0.01));
+      b.appendChild(makeSlider('Glow', 'necklaceEmissive', 0, 4, 0.05));
+
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(makeToggle('Spin', 'necklaceSpin', 'Crутить цепь вокруг текста'));
+      if (state.necklaceSpin) {
+        b.appendChild(makeSlider('Spin Speed', 'necklaceSpinSpeed', 0, 4, 0.05));
+        // Direction toggle (numeric +1 / -1).
+        const dirRow = el('div', { class: 'row' });
+        dirRow.appendChild(el('span', { class: 'row-label' }, ['Direction']));
+        const dirGroup = el('div', { class: 'flex gap-1' });
+        [
+          { v:  1, label: '↻ Right' },
+          { v: -1, label: '↺ Left'  },
+        ].forEach((opt) => {
+          const b2 = el('button', { class: 'preset-btn', type: 'button', style: 'padding:4px 8px; font-size:10px;' }, [opt.label]);
+          if (state.necklaceSpinDir === opt.v) { b2.style.background = 'rgba(99,102,241,0.18)'; b2.style.color = '#a5a7f5'; }
+          b2.addEventListener('click', () => {
+            pushUndo();
+            state.necklaceSpinDir = opt.v;
+            buildPanel();
+          });
+          dirGroup.appendChild(b2);
+        });
+        dirRow.appendChild(dirGroup);
+        b.appendChild(dirRow);
+      }
+      b.appendChild(makeToggle('Wobble', 'necklaceWobble', 'Лёгкое покачивание'));
+
+      // Quick "vibe" presets
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Vibe Presets']));
+      const vibes = [
+        { name: 'Gold Cuban',   vals: { necklaceStyle: 'oval',     necklaceColor: '#ffd166', necklaceMetalness: 1, necklaceRoughness: 0.18, necklaceLinkCount: 32, necklaceLinkSize: 1.1, necklaceRadius: 2.4, necklaceEmissive: 0 } },
+        { name: 'Silver Box',   vals: { necklaceStyle: 'box',      necklaceColor: '#cbd5e1', necklaceMetalness: 1, necklaceRoughness: 0.15, necklaceLinkCount: 36, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0 } },
+        { name: 'Pink Pearls',  vals: { necklaceStyle: 'pearls',   necklaceColor: '#fbcfe8', necklaceMetalness: 0, necklaceRoughness: 0.2, necklaceLinkCount: 28, necklaceLinkSize: 1.0, necklaceRadius: 2.3, necklaceEmissive: 0 } },
+        { name: 'Black Beads',  vals: { necklaceStyle: 'beads',    necklaceColor: '#111827', necklaceMetalness: 0.4, necklaceRoughness: 0.5, necklaceLinkCount: 30, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0 } },
+        { name: 'Punk Spikes',  vals: { necklaceStyle: 'spikes',   necklaceColor: '#1f2937', necklaceMetalness: 0.9, necklaceRoughness: 0.3, necklaceLinkCount: 22, necklaceLinkSize: 1.0, necklaceRadius: 2.2, necklaceEmissive: 0 } },
+        { name: 'Diamond Cubes',vals: { necklaceStyle: 'cubes',    necklaceColor: '#bae6fd', necklaceMetalness: 0.2, necklaceRoughness: 0.05, necklaceLinkCount: 28, necklaceLinkSize: 0.7, necklaceRadius: 2.4, necklaceEmissive: 0.2 } },
+        { name: 'Heart Gold',   vals: { necklaceStyle: 'hearts',   necklaceColor: '#ff5e9c', necklaceMetalness: 0.4, necklaceRoughness: 0.25, necklaceLinkCount: 18, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0.2 } },
+        { name: 'Star Glow',    vals: { necklaceStyle: 'stars',    necklaceColor: '#ffe066', necklaceMetalness: 0.3, necklaceRoughness: 0.3, necklaceLinkCount: 18, necklaceLinkSize: 0.9, necklaceRadius: 2.4, necklaceEmissive: 1.5 } },
+        { name: 'Sparkle Halo', vals: { necklaceStyle: 'sparkles', necklaceColor: '#ffffff', necklaceMetalness: 0.0, necklaceRoughness: 1.0, necklaceLinkCount: 24, necklaceLinkSize: 0.7, necklaceRadius: 2.5, necklaceEmissive: 2.5 } },
+        { name: 'Lightning',    vals: { necklaceStyle: 'bolts',    necklaceColor: '#7dd3fc', necklaceMetalness: 0, necklaceRoughness: 0.5, necklaceLinkCount: 16, necklaceLinkSize: 0.85, necklaceRadius: 2.4, necklaceEmissive: 2.5 } },
+        { name: 'Rope Thick',   vals: { necklaceStyle: 'rope',     necklaceColor: '#ffd166', necklaceMetalness: 1, necklaceRoughness: 0.2, necklaceLinkCount: 56, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0 } },
+        { name: 'Figaro Gold',  vals: { necklaceStyle: 'figaro',   necklaceColor: '#ffd166', necklaceMetalness: 1, necklaceRoughness: 0.18, necklaceLinkCount: 36, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0 } },
+        { name: 'Octa Crystal', vals: { necklaceStyle: 'octa',     necklaceColor: '#bae6fd', necklaceMetalness: 0.2, necklaceRoughness: 0.05, necklaceLinkCount: 24, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0.4 } },
+        { name: 'Disc Tribe',   vals: { necklaceStyle: 'disc',     necklaceColor: '#92400e', necklaceMetalness: 0.4, necklaceRoughness: 0.5, necklaceLinkCount: 30, necklaceLinkSize: 1.0, necklaceRadius: 2.3, necklaceEmissive: 0 } },
+        { name: 'Rose Petals',  vals: { necklaceStyle: 'flower',   necklaceColor: '#ff5e9c', necklaceMetalness: 0.1, necklaceRoughness: 0.4, necklaceLinkCount: 20, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0.2 } },
+        { name: 'Square Edge',  vals: { necklaceStyle: 'square',   necklaceColor: '#e7e9ee', necklaceMetalness: 1, necklaceRoughness: 0.3, necklaceLinkCount: 28, necklaceLinkSize: 1.0, necklaceRadius: 2.4, necklaceEmissive: 0 } },
+      ];
+      const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+      vibes.forEach((v) => {
+        const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center;' });
+        btn.textContent = v.name;
+        btn.addEventListener('click', () => {
+          pushUndo();
+          Object.assign(state, v.vals);
+          buildPanel();
+          rebuildNecklace();
+        });
+        grid.appendChild(btn);
+      });
+      b.appendChild(grid);
+    }
+  }));
 
   // ========== PARTICLES ==========
   addSection(makeSection('particles', '❄ Particles', '❄', (b) => {
@@ -3014,6 +3284,25 @@ function handleChange(key) {
     'decorationColor', 'decorationMetalness', 'decorationRoughness', 'decorationEmissive',
   ].includes(key)) {
     rebuildDecorations();
+  }
+
+  // Necklace
+  // - Style change rebuilds the chain (different geometry).
+  // - Count / radius / link-size / tilt all rebuild because they recreate
+  //   the per-link instances or the pivot transform.
+  // - Material-only changes (color, metalness, roughness, emissive) take a
+  //   cheap path that updates the shared MeshPhysicalMaterial uniforms.
+  if (key === 'necklaceStyle') buildPanel();
+  if ([
+    'necklaceStyle', 'necklaceLinkCount', 'necklaceRadius',
+    'necklaceLinkSize', 'necklaceTilt',
+  ].includes(key)) {
+    rebuildNecklace();
+  }
+  if ([
+    'necklaceColor', 'necklaceMetalness', 'necklaceRoughness', 'necklaceEmissive',
+  ].includes(key)) {
+    applyNecklaceMaterial();
   }
 
   // Particles
@@ -3513,6 +3802,7 @@ function applyAllChanges() {
   rebuildDecorations();
   rebuildParticles();
   rebuildReflectiveFloor();
+  rebuildNecklace();
   controls.autoRotate = state.autoRotate;
   controls.autoRotateSpeed = state.autoRotateSpeed * 2;
   document.getElementById('statsOverlay').style.display = state.showStats ? 'flex' : 'none';
@@ -3818,6 +4108,9 @@ function animate() {
   // Decorations animation (independent of the text animation mode)
   animateDecorations(dt, totalTime);
 
+  // Necklace orbit
+  animateNecklace(dt, totalTime);
+
   // Particles
   animateParticles(dt, totalTime);
 
@@ -3896,6 +4189,7 @@ async function init() {
   rebuildDecorations();
   rebuildParticles();
   rebuildReflectiveFloor();
+  rebuildNecklace();
   updateHud();
   loadingOverlay.style.display = 'none';
   animate();
