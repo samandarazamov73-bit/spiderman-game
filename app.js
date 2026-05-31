@@ -651,6 +651,9 @@ const DEFAULTS = {
 
   // UI
   showStats: true,
+
+  // Left rail / tab system — drives which property sections are shown.
+  activeTab: 'content',
 };
 
 // Live state (clone of defaults)
@@ -662,6 +665,51 @@ state.customFont = null;
 const canvas = document.getElementById('canvas');
 const panel = document.getElementById('panel');
 const loadingOverlay = document.getElementById('loadingOverlay');
+const leftRailEl = document.getElementById('leftRail');
+
+// ============ LEFT RAIL TABS ============
+// Group the 19 property sections into 6 logical workspaces. The left rail
+// becomes a tab switcher — only sections for the active tab are rendered
+// in the right panel, so the UI stays uncluttered.
+const RAIL_TABS = [
+  { id: 'content',  icon: 'T',  title: 'Content',         sections: ['text', 'typography'] },
+  { id: 'shape',    icon: '▣',  title: 'Geometry & Material', sections: ['geometry', 'material', 'material-extras', 'outline'] },
+  { id: 'effects',  icon: '✨', title: 'Effects',          sections: ['bloom', 'post', 'layereffects'] },
+  { id: 'decorate', icon: '🎁', title: 'Decorations',      sections: ['decorations', 'particles'] },
+  { id: 'scene',    icon: '🌅', title: 'Scene & Camera',   sections: ['environment', 'lighting', 'floor', 'camera', 'animation'] },
+  { id: 'project',  icon: '⤓',  title: 'Export & Project', sections: ['export', 'presets', 'stats'] },
+];
+
+function getActiveTabSections() {
+  const tab = RAIL_TABS.find(t => t.id === state.activeTab) || RAIL_TABS[0];
+  return new Set(tab.sections);
+}
+
+function buildLeftRail() {
+  leftRailEl.innerHTML = '';
+  RAIL_TABS.forEach((tab) => {
+    const btn = document.createElement('button');
+    btn.className = 'rail-btn' + (state.activeTab === tab.id ? ' active' : '');
+    btn.title = tab.title;
+    btn.innerHTML = `<span>${tab.icon}</span>`;
+    btn.addEventListener('click', () => {
+      if (state.activeTab === tab.id) return;
+      state.activeTab = tab.id;
+      buildLeftRail();
+      buildPanel();
+      // Scroll the right panel back to the top so the new tab starts fresh.
+      panel.scrollTop = 0;
+    });
+    leftRailEl.appendChild(btn);
+  });
+  const spacer = document.createElement('div');
+  spacer.style.flex = '1';
+  leftRailEl.appendChild(spacer);
+  const ver = document.createElement('span');
+  ver.className = 'text-[9px] font-mono text-ink-200';
+  ver.textContent = 'v0.2';
+  leftRailEl.appendChild(ver);
+}
 
 // ============ THREE SETUP ============
 const renderer = new THREE.WebGLRenderer({
@@ -1941,6 +1989,10 @@ function el(tag, attrs = {}, children = []) {
 }
 
 function makeSection(id, title, icon, build, opts = {}) {
+  // Only render sections that belong to the currently-active rail tab.
+  // Returns null otherwise; appendChild is null-safe via guards in buildPanel.
+  const activeSections = getActiveTabSections();
+  if (!activeSections.has(id)) return null;
   const sec = el('div', { class: 'section' + (opts.collapsed ? ' collapsed' : ''), id: 'sec-' + id });
   const head = el('div', { class: 'section-header' });
   head.innerHTML = `<span class="title"><span class="icon">${icon}</span>${title}</span><span class="chev">▼</span>`;
@@ -2049,8 +2101,20 @@ function makeToggle(label, key, hint) {
 function buildPanel() {
   panel.innerHTML = '';
 
+  // Helper: append a section to the panel only if it belongs to the active tab
+  // (makeSection returns null otherwise so we don't get appendChild(null) errors).
+  const addSection = (sec) => { if (sec) panel.appendChild(sec); };
+
+  // Tab title at the very top of the panel for clarity.
+  const activeTab = RAIL_TABS.find(t => t.id === state.activeTab) || RAIL_TABS[0];
+  const tabHeader = el('div', { class: 'px-4 py-2 border-b border-ink-400/10 flex items-center gap-2' }, [
+    el('span', { class: 'text-[14px]' }, [activeTab.icon]),
+    el('span', { class: 'text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-50' }, [activeTab.title]),
+  ]);
+  panel.appendChild(tabHeader);
+
   // ========== TEXT ==========
-  panel.appendChild(makeSection('text', 'Text', 'T', (b) => {
+  addSection(makeSection('text', 'Text', 'T', (b) => {
     const ta = el('textarea', { class: 'input-base', rows: 3, placeholder: 'Type to sculpt…\n(use newline for multi-line)', spellcheck: 'false' });
     ta.value = state.text;
     const charCounter = el('span', { class: 'font-mono' }, [state.text.length + ' chars']);
@@ -2071,7 +2135,7 @@ function buildPanel() {
   }));
 
   // ========== TYPOGRAPHY ==========
-  panel.appendChild(makeSection('typography', 'Typography', '¶', (b) => {
+  addSection(makeSection('typography', 'Typography', '¶', (b) => {
     const fontOpts = DEFAULT_FONTS.map((f) => ({ value: f.id, label: f.name }));
     if (state.customFontName) fontOpts.push({ value: 'custom', label: state.customFontName + ' (Custom)' });
     b.appendChild(makeSelect('Font', 'fontId', fontOpts));
@@ -2104,7 +2168,7 @@ function buildPanel() {
   }));
 
   // ========== GEOMETRY ==========
-  panel.appendChild(makeSection('geometry', 'Geometry', '▣', (b) => {
+  addSection(makeSection('geometry', 'Geometry', '▣', (b) => {
     b.appendChild(makeSlider('Depth', 'depth', 0.01, 2, 0.01));
     b.appendChild(makeSlider('Curve Segments', 'curveSegments', 2, 32, 1, true));
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
@@ -2171,7 +2235,7 @@ function buildPanel() {
   }), { collapsed: false });
 
   // ========== MATERIAL ==========
-  panel.appendChild(makeSection('material', 'Material', '✦', (b) => {
+  addSection(makeSection('material', 'Material', '✦', (b) => {
     b.appendChild(makeSelect('Shading', 'shadingMode', [
       { value: 'pbr', label: 'PBR (Physical)' },
       { value: 'matcap', label: 'Matcap' },
@@ -2220,7 +2284,7 @@ function buildPanel() {
 
   // ========== ADVANCED MATERIAL (PBR only) ==========
   if (state.shadingMode === 'pbr') {
-    panel.appendChild(makeSection('material-extras', 'Advanced Material', '⚛', (b) => {
+    addSection(makeSection('material-extras', 'Advanced Material', '⚛', (b) => {
       b.appendChild(makeColor('Emissive', 'emissive'));
       b.appendChild(makeSlider('Emissive Intensity', 'emissiveIntensity', 0, 5, 0.05));
       b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
@@ -2239,7 +2303,7 @@ function buildPanel() {
   }
 
   // ========== OUTLINE ==========
-  panel.appendChild(makeSection('outline', 'Outline (Toon)', '◇', (b) => {
+  addSection(makeSection('outline', 'Outline (Toon)', '◇', (b) => {
     b.appendChild(makeToggle('Enable Outline', 'outlineOn'));
     if (state.outlineOn) {
       b.appendChild(makeSlider('Thickness', 'outlineThickness', 0.005, 0.1, 0.005));
@@ -2248,7 +2312,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== DECORATIONS (3D items around the text) ==========
-  panel.appendChild(makeSection('decorations', '🎁 3D Decorations', '🎁', (b) => {
+  addSection(makeSection('decorations', '🎁 3D Decorations', '🎁', (b) => {
     // Category dropdown — keeps the long item list manageable
     b.appendChild(makeSelect('Category', 'decorationCategory',
       [{ value: 'all', label: 'All' }, ...DECORATION_CATEGORIES.map(c => ({ value: c.id, label: c.name }))]
@@ -2332,7 +2396,7 @@ function buildPanel() {
   }));
 
   // ========== ENVIRONMENT ==========
-  panel.appendChild(makeSection('environment', 'Environment', '◯', (b) => {
+  addSection(makeSection('environment', 'Environment', '◯', (b) => {
     b.appendChild(makeSelect('Background', 'bgMode', [
       { value: 'solid', label: 'Solid Color' },
       { value: 'gradient', label: 'Gradient' },
@@ -2362,7 +2426,7 @@ function buildPanel() {
   }));
 
   // ========== LIGHTING ==========
-  panel.appendChild(makeSection('lighting', 'Lighting', '☀', (b) => {
+  addSection(makeSection('lighting', 'Lighting', '☀', (b) => {
     b.appendChild(makeSlider('Ambient', 'ambientIntensity', 0, 2, 0.02));
     b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Key Light (Directional)']));
     b.appendChild(makeSlider('Intensity', 'dirIntensity', 0, 5, 0.05));
@@ -2393,7 +2457,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== BLOOM (its own dedicated section) ==========
-  panel.appendChild(makeSection('bloom', '✨ Bloom', '✨', (b) => {
+  addSection(makeSection('bloom', '✨ Bloom', '✨', (b) => {
     b.appendChild(makeToggle('Enable Bloom', 'bloomOn', 'Светящееся свечение на ярких пикселях'));
     if (state.bloomOn) {
       b.appendChild(makeSlider('Strength', 'bloomStrength', 0, 4, 0.05));
@@ -2438,7 +2502,7 @@ function buildPanel() {
   }));
 
   // ========== EXTRA EFFECTS ==========
-  panel.appendChild(makeSection('post', 'Extra Effects', '✶', (b) => {
+  addSection(makeSection('post', 'Extra Effects', '✶', (b) => {
     b.appendChild(makeToggle('Vignette', 'vignetteOn'));
     if (state.vignetteOn) b.appendChild(makeSlider('Intensity', 'vignetteIntensity', 0, 1, 0.02));
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
@@ -2453,7 +2517,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== LAYER EFFECTS (Photoshop-style) ==========
-  panel.appendChild(makeSection('layereffects', '🎨 Layer Effects', '🎨', (b) => {
+  addSection(makeSection('layereffects', '🎨 Layer Effects', '🎨', (b) => {
     b.appendChild(makeToggle('Drop Shadow', 'dropShadowOn'));
     if (state.dropShadowOn) {
       b.appendChild(makeColor('Shadow Color', 'dropShadowColor'));
@@ -2497,7 +2561,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== PARTICLES ==========
-  panel.appendChild(makeSection('particles', '❄ Particles', '❄', (b) => {
+  addSection(makeSection('particles', '❄ Particles', '❄', (b) => {
     b.appendChild(makeSelect('Type', 'particlesType', [
       { value: 'none',   label: 'None' },
       { value: 'snow',   label: '❄ Snow' },
@@ -2517,7 +2581,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== FLOOR ==========
-  panel.appendChild(makeSection('floor', '◐ Floor / Ground', '◐', (b) => {
+  addSection(makeSection('floor', '◐ Floor / Ground', '◐', (b) => {
     b.appendChild(makeToggle('Soft Contact Shadow', 'showShadows'));
     b.appendChild(makeToggle('Show Grid', 'showGrid'));
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
@@ -2528,7 +2592,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== CAMERA ==========
-  panel.appendChild(makeSection('camera', 'Camera', '🎥', (b) => {
+  addSection(makeSection('camera', 'Camera', '🎥', (b) => {
     b.appendChild(makeToggle('Orthographic', 'orthographic', 'Disable perspective'));
     if (!state.orthographic) {
       b.appendChild(makeSlider('FOV', 'fov', 10, 90, 1, true));
@@ -2542,7 +2606,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== ANIMATION ==========
-  panel.appendChild(makeSection('animation', 'Animation', '↻', (b) => {
+  addSection(makeSection('animation', 'Animation', '↻', (b) => {
     b.appendChild(makeToggle('Auto-Rotate (camera)', 'autoRotate', 'Camera circles the text'));
     if (state.autoRotate) b.appendChild(makeSlider('Rotation Speed', 'autoRotateSpeed', 0.1, 5, 0.1));
 
@@ -2566,7 +2630,7 @@ function buildPanel() {
   }));
 
   // ========== EXPORT ==========
-  panel.appendChild(makeSection('export', 'Export', '⤓', (b) => {
+  addSection(makeSection('export', 'Export', '⤓', (b) => {
     b.appendChild(el('p', { class: 'hint' }, ['Capture or download in different formats.']));
     [
       ['📷 PNG (1×)', () => exportPNG(1)],
@@ -2583,7 +2647,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== PRESETS / SCENE ==========
-  panel.appendChild(makeSection('presets', 'Scene Presets', '★', (b) => {
+  addSection(makeSection('presets', 'Scene Presets', '★', (b) => {
     b.appendChild(el('p', { class: 'hint' }, ['Сохраняй сцену в localStorage и загружай позже.']));
     const slotInput = el('input', { class: 'input-base', type: 'text', placeholder: 'Slot name', style: 'width:100%; padding:6px 10px' });
     b.appendChild(slotInput);
@@ -2615,7 +2679,7 @@ function buildPanel() {
   }, { collapsed: true }));
 
   // ========== STATS ==========
-  panel.appendChild(makeSection('stats', 'Stats', '📊', (b) => {
+  addSection(makeSection('stats', 'Stats', '📊', (b) => {
     b.appendChild(makeToggle('Show Stats Overlay', 'showStats'));
     const info = el('div', { class: 'flex flex-col gap-1 font-mono text-[10px] text-ink-200', id: 'panelStats' });
     info.innerHTML = `
@@ -2943,6 +3007,7 @@ function applyAllChanges() {
   controls.autoRotate = state.autoRotate;
   controls.autoRotateSpeed = state.autoRotateSpeed * 2;
   document.getElementById('statsOverlay').style.display = state.showStats ? 'flex' : 'none';
+  buildLeftRail();
   buildPanel();
   setActiveFont().then(updateHud);
   loadHDRI(state.envPreset);
@@ -3112,6 +3177,7 @@ async function init() {
   // Pre-load BufferGeometryUtils so multi-part decorations (notes, crown)
   // merge synchronously on first render.
   await getBufferGeometryUtils();
+  buildLeftRail();
   buildPanel();
   applyMaterial();
   ground.visible = state.showShadows;
