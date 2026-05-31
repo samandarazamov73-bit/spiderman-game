@@ -13,10 +13,10 @@
   align-items: center;
   justify-content: center;
   color: #7a7f8c;
-  font-size: 14px;
   transition: background 0.12s, color 0.12s;
   position: relative;
 }
+.rail-btn svg { display: block; }
 .rail-btn:hover {
   color: #e7e9ee;
   background: #15171d;

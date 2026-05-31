@@ -654,6 +654,10 @@ const DEFAULTS = {
 
   // Left rail / tab system — drives which property sections are shown.
   activeTab: 'content',
+
+  // Video / GIF export
+  videoDuration: 15,
+  videoFps: 30,
 };
 
 // Live state (clone of defaults)
@@ -670,14 +674,23 @@ const leftRailEl = document.getElementById('leftRail');
 // ============ LEFT RAIL TABS ============
 // Group the 19 property sections into 6 logical workspaces. The left rail
 // becomes a tab switcher — only sections for the active tab are rendered
-// in the right panel, so the UI stays uncluttered.
+// in the right panel, so the UI stays uncluttered. Icons are inline SVGs
+// (Lucide-style strokes) instead of emojis for a clean professional look.
+const SVG_ICON = {
+  type: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>',
+  shape: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  effects: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6l-5 3.6 1.9-5.8L4 8.8h6.1z"/></svg>',
+  decorate: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+  scene: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+  project: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+};
 const RAIL_TABS = [
-  { id: 'content',  icon: 'T',  title: 'Content',         sections: ['text', 'typography'] },
-  { id: 'shape',    icon: '▣',  title: 'Geometry & Material', sections: ['geometry', 'material', 'material-extras', 'outline'] },
-  { id: 'effects',  icon: '✨', title: 'Effects',          sections: ['bloom', 'post', 'layereffects'] },
-  { id: 'decorate', icon: '🎁', title: 'Decorations',      sections: ['decorations', 'particles'] },
-  { id: 'scene',    icon: '🌅', title: 'Scene & Camera',   sections: ['environment', 'lighting', 'floor', 'camera', 'animation'] },
-  { id: 'project',  icon: '⤓',  title: 'Export & Project', sections: ['export', 'presets', 'stats'] },
+  { id: 'content',  icon: SVG_ICON.type,     title: 'Content',         sections: ['text', 'typography'] },
+  { id: 'shape',    icon: SVG_ICON.shape,    title: 'Geometry & Material', sections: ['geometry', 'material', 'material-extras', 'outline'] },
+  { id: 'effects',  icon: SVG_ICON.effects,  title: 'Effects',         sections: ['bloom', 'post', 'layereffects'] },
+  { id: 'decorate', icon: SVG_ICON.decorate, title: 'Decorations',     sections: ['decorations', 'particles'] },
+  { id: 'scene',    icon: SVG_ICON.scene,    title: 'Scene & Camera',  sections: ['environment', 'lighting', 'floor', 'camera', 'animation'] },
+  { id: 'project',  icon: SVG_ICON.project,  title: 'Export & Project', sections: ['export', 'presets', 'stats'] },
 ];
 
 function getActiveTabSections() {
@@ -691,7 +704,7 @@ function buildLeftRail() {
     const btn = document.createElement('button');
     btn.className = 'rail-btn' + (state.activeTab === tab.id ? ' active' : '');
     btn.title = tab.title;
-    btn.innerHTML = `<span>${tab.icon}</span>`;
+    btn.innerHTML = tab.icon;
     btn.addEventListener('click', () => {
       if (state.activeTab === tab.id) return;
       state.activeTab = tab.id;
@@ -2107,10 +2120,9 @@ function buildPanel() {
 
   // Tab title at the very top of the panel for clarity.
   const activeTab = RAIL_TABS.find(t => t.id === state.activeTab) || RAIL_TABS[0];
-  const tabHeader = el('div', { class: 'px-4 py-2 border-b border-ink-400/10 flex items-center gap-2' }, [
-    el('span', { class: 'text-[14px]' }, [activeTab.icon]),
-    el('span', { class: 'text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-50' }, [activeTab.title]),
-  ]);
+  const tabHeader = document.createElement('div');
+  tabHeader.className = 'px-4 py-2 border-b border-ink-400/10 flex items-center gap-2 text-accent';
+  tabHeader.innerHTML = `${activeTab.icon}<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-50">${activeTab.title}</span>`;
   panel.appendChild(tabHeader);
 
   // ========== TEXT ==========
@@ -2631,19 +2643,48 @@ function buildPanel() {
 
   // ========== EXPORT ==========
   addSection(makeSection('export', 'Export', '⤓', (b) => {
-    b.appendChild(el('p', { class: 'hint' }, ['Capture or download in different formats.']));
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Image']));
     [
       ['📷 PNG (1×)', () => exportPNG(1)],
       ['📷 PNG (2×)', () => exportPNG(2)],
       ['📷 PNG (4×)', () => exportPNG(4)],
-      ['📦 GLB', () => exportGLB()],
-      ['📐 OBJ', () => exportOBJ()],
-      ['🖨 STL', () => exportSTL()],
     ].forEach(([label, fn]) => {
       const btn = el('button', { class: 'btn-secondary', type: 'button' }, [label]);
       btn.addEventListener('click', fn);
       b.appendChild(btn);
     });
+
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Video & Animation']));
+    b.appendChild(makeSlider('Video Duration (sec)', 'videoDuration', 3, 30, 1, true));
+    b.appendChild(makeSlider('Video FPS', 'videoFps', 12, 60, 1, true));
+    [
+      ['🎬 MP4 / WebM (record live)', () => exportVideo()],
+      ['🎞 GIF (animated)', () => exportGIF()],
+    ].forEach(([label, fn]) => {
+      const btn = el('button', { class: 'btn-secondary', type: 'button' }, [label]);
+      btn.addEventListener('click', fn);
+      b.appendChild(btn);
+    });
+    b.appendChild(el('p', { class: 'hint' }, [
+      'Video uses MediaRecorder (best in Chrome / Edge). GIF rendering may take a few seconds — wait for the download prompt.',
+    ]));
+
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['3D Model']));
+    [
+      ['📦 GLB (recommended — keeps colors)', () => exportGLB()],
+      ['🎨 PLY (with vertex colors)',         () => exportPLY()],
+      ['📐 OBJ',                              () => exportOBJ()],
+      ['🖨 STL (geometry only — no colors)', () => exportSTL()],
+    ].forEach(([label, fn]) => {
+      const btn = el('button', { class: 'btn-secondary', type: 'button' }, [label]);
+      btn.addEventListener('click', fn);
+      b.appendChild(btn);
+    });
+    b.appendChild(el('p', { class: 'hint' }, [
+      'STL stores only geometry — colors and animation are not part of the format. Use GLB for full PBR colors, PLY for baked vertex colors.',
+    ]));
   }, { collapsed: true }));
 
   // ========== PRESETS / SCENE ==========
@@ -2922,6 +2963,177 @@ async function exportSTL() {
   const blob = new Blob([data], { type: 'application/octet-stream' });
   download(URL.createObjectURL(blob), `3d-text-${Date.now()}.stl`, true);
 }
+
+// PLY *can* store per-vertex colours, so we bake the active material colour
+// into each vertex of every text-group mesh before exporting.
+async function exportPLY() {
+  const { PLYExporter } = await import('three/addons/exporters/PLYExporter.js');
+  // Bake the body's PBR colour into a vertex-colour attribute on every mesh.
+  const baked = [];
+  textGroup.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const geom = obj.geometry.clone();
+    const count = geom.attributes.position.count;
+    const colArr = new Float32Array(count * 3);
+    const c = obj.material && obj.material.color ? obj.material.color : new THREE.Color(state.color);
+    for (let i = 0; i < count; i++) {
+      colArr[i * 3    ] = c.r;
+      colArr[i * 3 + 1] = c.g;
+      colArr[i * 3 + 2] = c.b;
+    }
+    geom.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+    baked.push(new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ vertexColors: true })));
+  });
+  const tempGroup = new THREE.Group();
+  baked.forEach((m) => tempGroup.add(m));
+  new PLYExporter().parse(tempGroup, (data) => {
+    const blob = new Blob([data], { type: 'application/octet-stream' });
+    download(URL.createObjectURL(blob), `3d-text-${Date.now()}.ply`, true);
+    baked.forEach((m) => m.geometry.dispose());
+  }, { binary: true, includeColors: true });
+}
+
+// Live MediaRecorder capture of the WebGL canvas. Output is .webm (Chrome/
+// Firefox) or .mp4 when the browser supports the H.264 codec (newer Chrome,
+// Edge, Safari). The user can rename .webm to .mp4 if their video tool needs
+// that extension — most players accept either container.
+let _recordingInProgress = false;
+function exportVideo() {
+  if (_recordingInProgress) { alert('Запись уже идёт, подожди завершения.'); return; }
+  if (!canvas.captureStream) {
+    alert('Твой браузер не поддерживает canvas.captureStream(). Попробуй Chrome / Edge.');
+    return;
+  }
+  // Pick the best mime type the browser supports (preferred order: mp4 → webm-vp9 → webm-vp8).
+  const candidates = [
+    { mime: 'video/mp4;codecs=avc1',  ext: 'mp4'  },
+    { mime: 'video/webm;codecs=vp9',  ext: 'webm' },
+    { mime: 'video/webm;codecs=vp8',  ext: 'webm' },
+    { mime: 'video/webm',             ext: 'webm' },
+  ];
+  let chosen = null;
+  for (const c of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(c.mime)) { chosen = c; break; }
+  }
+  if (!chosen) { alert('MediaRecorder API недоступен в этом браузере.'); return; }
+
+  const fps = Math.max(12, Math.min(60, state.videoFps || 30));
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, { mimeType: chosen.mime, videoBitsPerSecond: 8_000_000 });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    _recordingInProgress = false;
+    setRecordingHud(false);
+    const blob = new Blob(chunks, { type: chosen.mime });
+    download(URL.createObjectURL(blob), `3d-text-${Date.now()}.${chosen.ext}`, true);
+  };
+
+  _recordingInProgress = true;
+  setRecordingHud(true, state.videoDuration || 15);
+  recorder.start();
+  setTimeout(() => { try { recorder.stop(); } catch (e) { console.error(e); } },
+    Math.max(1, state.videoDuration || 15) * 1000);
+}
+
+// On-screen recording badge so the user can see capture is in progress.
+function setRecordingHud(on, totalSec = 0) {
+  let badge = document.getElementById('recBadge');
+  if (!on) { if (badge) badge.remove(); return; }
+  badge = document.createElement('div');
+  badge.id = 'recBadge';
+  badge.style.cssText =
+    'position:fixed; top:60px; left:50%; transform:translateX(-50%); z-index:30;' +
+    'padding:6px 14px; background:rgba(220,38,38,0.92); color:#fff;' +
+    'font-family: "JetBrains Mono", monospace; font-size:11px; border-radius:999px;' +
+    'box-shadow:0 0 18px rgba(220,38,38,0.6); display:flex; align-items:center; gap:8px;';
+  const dot = document.createElement('span');
+  dot.style.cssText = 'width:8px; height:8px; border-radius:50%; background:#fff; animation:pulseRec 1s infinite;';
+  const lab = document.createElement('span');
+  lab.id = 'recBadgeLabel';
+  lab.textContent = `REC · ${totalSec}s`;
+  badge.appendChild(dot); badge.appendChild(lab);
+  document.body.appendChild(badge);
+  if (!document.getElementById('recBadgeStyle')) {
+    const s = document.createElement('style');
+    s.id = 'recBadgeStyle';
+    s.textContent = '@keyframes pulseRec { 0%,100% { opacity:1 } 50% { opacity:0.3 } }';
+    document.head.appendChild(s);
+  }
+  // Countdown
+  let remaining = totalSec;
+  const t = setInterval(() => {
+    remaining--;
+    const el = document.getElementById('recBadgeLabel');
+    if (el) el.textContent = `REC · ${Math.max(0, remaining)}s`;
+    if (remaining <= 0 || !document.getElementById('recBadge')) clearInterval(t);
+  }, 1000);
+}
+
+// Animated GIF export via gif.js (lazy-loaded from a CDN). The recorder
+// samples the WebGL canvas at the chosen FPS for the chosen duration.
+async function exportGIF() {
+  if (_recordingInProgress) { alert('Подожди — запись видео ещё идёт.'); return; }
+  // Lazy-load gif.js + its worker from a CDN that exposes them as ES modules.
+  const gifJsUrl    = 'https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js';
+  const gifWorker   = 'https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.worker.js';
+  if (!window.GIF) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = gifJsUrl;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    }).catch(() => { alert('Не удалось загрузить gif.js. Проверь интернет.'); });
+    if (!window.GIF) return;
+  }
+
+  const fps = Math.max(8, Math.min(30, state.videoFps || 20));
+  const duration = Math.max(1, Math.min(30, state.videoDuration || 15));
+  const totalFrames = Math.round(fps * duration);
+  const frameDelay = Math.round(1000 / fps);
+
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const gif = new window.GIF({
+    workers: 2,
+    quality: 10,
+    width: Math.min(800, w),
+    height: Math.min(800, h) * (Math.min(800, w) / w),
+    workerScript: gifWorker,
+    transparent: null,
+  });
+
+  _recordingInProgress = true;
+  setRecordingHud(true, duration);
+
+  // Capture loop: render + addFrame, paced by frameDelay.
+  let frame = 0;
+  const captureCanvas = document.createElement('canvas');
+  captureCanvas.width = Math.min(800, w);
+  captureCanvas.height = Math.round(captureCanvas.width * (h / w));
+  const cctx = captureCanvas.getContext('2d');
+
+  const captureOne = () => {
+    if (frame >= totalFrames) {
+      gif.on('finished', (blob) => {
+        _recordingInProgress = false;
+        setRecordingHud(false);
+        download(URL.createObjectURL(blob), `3d-text-${Date.now()}.gif`, true);
+      });
+      gif.render();
+      return;
+    }
+    // The canvas is rendered every requestAnimationFrame by the main loop —
+    // we just sample it. Scale-down via a 2D canvas so file size stays sane.
+    cctx.drawImage(canvas, 0, 0, captureCanvas.width, captureCanvas.height);
+    gif.addFrame(captureCanvas, { copy: true, delay: frameDelay });
+    frame++;
+    setTimeout(captureOne, frameDelay);
+  };
+  captureOne();
+}
+
 function download(href, name, revoke = false) {
   const a = document.createElement('a');
   a.href = href; a.download = name; a.click();
