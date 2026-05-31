@@ -2667,7 +2667,7 @@ function buildPanel() {
       b.appendChild(btn);
     });
     b.appendChild(el('p', { class: 'hint' }, [
-      'Запись начинается мгновенно и идёт Duration секунд + 1 секунду буфера, потом сама останавливается и скачивается.',
+      'Записывает ровно один цикл анимации. После записи откроется превью с автоматическим loop — оттуда можно скачать файл.',
     ]));
 
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
@@ -3026,16 +3026,103 @@ function exportVideo() {
     _recordingInProgress = false;
     setRecordingHud(false);
     const blob = new Blob(chunks, { type: chosen.mime });
-    download(URL.createObjectURL(blob), `3d-text-${Date.now()}.${chosen.ext}`, true);
+    const url = URL.createObjectURL(blob);
+    // Show a built-in looping preview so the user can immediately see the
+    // file plays as a seamless loop. Video files don't loop "by themselves";
+    // looping is a player feature — we use <video loop> here, then offer
+    // download. The MP4/WebM container has no native loop flag.
+    showLoopPreview(url, chosen.ext);
   };
 
   _recordingInProgress = true;
-  // Record for the configured duration + 1 second buffer so the loop has a
-  // clean "tail" frame after the animation finishes its last cycle.
-  const totalSec = Math.max(1, state.videoDuration || 5) + 1;
+  // Record exactly one full animation cycle. NO tail buffer — that was
+  // breaking the seamless loop because the last second showed a near-static
+  // frame. With a clean cycle, <video loop> wraps perfectly.
+  const totalSec = Math.max(1, state.videoDuration || 5);
   setRecordingHud(true, totalSec);
   recorder.start();
   setTimeout(() => { try { recorder.stop(); } catch (e) { console.error(e); } }, totalSec * 1000);
+}
+
+// Modal that plays the recorded clip on a loop, with Download / Close buttons.
+// MP4 / WebM don't have a "loop" flag baked into the container; the seamless-
+// looking playback you see in social apps is the player's `loop` attribute.
+// We recreate that experience here.
+function showLoopPreview(blobUrl, ext) {
+  const old = document.getElementById('loopPreviewModal');
+  if (old) old.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'loopPreviewModal';
+  modal.style.cssText =
+    'position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;' +
+    'background:rgba(0,0,0,0.78); backdrop-filter:blur(6px);';
+
+  const card = document.createElement('div');
+  card.style.cssText =
+    'max-width:min(680px, 90vw); width:100%; background:#0e1014;' +
+    'border:1px solid rgba(54,58,69,0.5); border-radius:12px; overflow:hidden;' +
+    'box-shadow:0 20px 60px rgba(0,0,0,0.5); display:flex; flex-direction:column;';
+
+  // Header
+  const header = document.createElement('div');
+  header.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(54,58,69,0.4); display:flex; align-items:center; justify-content:space-between;';
+  header.innerHTML =
+    '<span style="font-weight:600; font-size:13px; color:#e7e9ee;">' +
+    '🔁 Loop Preview — playing on repeat</span>' +
+    '<span style="font-family:\'JetBrains Mono\', monospace; font-size:10px; color:#7a7f8c;">' + ext.toUpperCase() + '</span>';
+  card.appendChild(header);
+
+  // Looping <video> player. The `loop` attribute is what makes it appear
+  // endless. Without it, MP4/WebM stops at the end of the file.
+  const video = document.createElement('video');
+  video.src = blobUrl;
+  video.autoplay = true;
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.controls = true;
+  video.style.cssText = 'width:100%; display:block; background:#000; max-height:60vh;';
+  card.appendChild(video);
+
+  // Footer with actions
+  const footer = document.createElement('div');
+  footer.style.cssText = 'padding:12px 16px; display:flex; gap:8px; justify-content:flex-end;';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn-secondary';
+  closeBtn.style.cssText = 'padding:8px 14px; flex:0 0 auto;';
+  closeBtn.textContent = 'Close';
+  closeBtn.onclick = () => {
+    URL.revokeObjectURL(blobUrl);
+    modal.remove();
+  };
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'btn-primary';
+  dlBtn.style.cssText = 'padding:8px 14px; flex:0 0 auto;';
+  dlBtn.textContent = '⤓ Download ' + ext.toUpperCase();
+  dlBtn.onclick = () => {
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `3d-text-loop-${Date.now()}.${ext}`;
+    a.click();
+  };
+  footer.appendChild(closeBtn);
+  footer.appendChild(dlBtn);
+  card.appendChild(footer);
+
+  // Hint about how looping works
+  const hint = document.createElement('div');
+  hint.style.cssText = 'padding:0 16px 12px 16px; font-size:10px; color:#7a7f8c; line-height:1.5;';
+  hint.innerHTML =
+    'Видео-файл (MP4/WebM) сам по себе не «лупит» — это делает плеер. ' +
+    'Этот предпросмотр играет с включённым <code style="background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:3px;">loop</code> атрибутом. ' +
+    'В Instagram / TikTok ролик зациклится автоматически. В обычном плеере включи кнопку Loop / Repeat.';
+  card.appendChild(hint);
+
+  modal.appendChild(card);
+  // Click backdrop to close
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeBtn.click(); });
+  document.body.appendChild(modal);
 }
 
 // On-screen recording badge so the user can see capture is in progress.
@@ -3091,8 +3178,10 @@ async function exportGIF() {
   }
 
   const fps = Math.max(8, Math.min(30, state.videoFps || 20));
-  // Same Duration + 1s tail buffer convention as the MP4 recorder.
-  const duration = Math.max(1, Math.min(60, (state.videoDuration || 5) + 1));
+  // Record exactly one full cycle for a seamless loop (GIFs auto-loop in
+  // every viewer, so no tail buffer is needed — and a tail would actually
+  // create a visible "pause" between loops).
+  const duration = Math.max(1, Math.min(60, state.videoDuration || 5));
   const totalFrames = Math.round(fps * duration);
   const frameDelay = Math.round(1000 / fps);
 
