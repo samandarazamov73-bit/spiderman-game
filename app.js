@@ -215,6 +215,222 @@ function makeSpiralGeom() {
   return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.05, 8, false);
 }
 
+// ----- Extra decoration generators -----
+function makeMoonGeom() {
+  // Crescent moon: outer disc minus offset disc
+  const outer = new THREE.Shape();
+  outer.absarc(0, 0, 0.45, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0.18, 0, 0.4, 0, Math.PI * 2, true);
+  outer.holes.push(hole);
+  return new THREE.ExtrudeGeometry(outer, { depth: 0.14, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.03, bevelSegments: 3, curveSegments: 24 });
+}
+function makeSunGeom() {
+  // Sun: disc + radial spikes
+  const parts = [new THREE.SphereGeometry(0.30, 24, 12)];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const sp = new THREE.ConeGeometry(0.06, 0.22, 6);
+    sp.translate(0, 0.40, 0);
+    sp.rotateZ(-a);
+    parts.push(sp);
+  }
+  return mergeGeoms(parts);
+}
+function makeCloudGeom() {
+  // 4 spheres clumped together
+  const s = (x, y, r) => { const g = new THREE.SphereGeometry(r, 16, 12); g.translate(x, y, 0); return g; };
+  return mergeGeoms([s(0, 0, 0.28), s(-0.28, -0.05, 0.22), s(0.28, -0.05, 0.24), s(0, 0.20, 0.20)]);
+}
+function makeSnowflakeGeom() {
+  // 6-arm flake — extruded path
+  const parts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const arm = new THREE.BoxGeometry(0.05, 0.55, 0.05);
+    arm.translate(0, 0.275, 0);
+    arm.rotateZ(-a);
+    parts.push(arm);
+    // little spike on each arm
+    for (const t of [0.18, 0.32]) {
+      const sp = new THREE.BoxGeometry(0.04, 0.16, 0.04);
+      sp.translate(0, t, 0);
+      sp.rotateZ(Math.PI / 4);
+      sp.translate(0, t, 0);
+      const sp2 = sp.clone();
+      sp.rotateZ(-a);
+      sp2.rotateZ(-Math.PI / 2 - a);
+      parts.push(sp);
+      parts.push(sp2);
+    }
+  }
+  return mergeGeoms(parts);
+}
+function makeLeafGeom() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.5);
+  shape.bezierCurveTo(0.35, 0.45, 0.35, -0.15, 0, -0.5);
+  shape.bezierCurveTo(-0.35, -0.15, -0.35, 0.45, 0, 0.5);
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2, curveSegments: 16 });
+}
+function makeFlowerGeom() {
+  // 5 petals around a center disc
+  const parts = [new THREE.SphereGeometry(0.12, 16, 12)];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const petal = new THREE.SphereGeometry(0.16, 16, 10);
+    petal.scale(1.0, 1.6, 0.5);
+    petal.translate(0, 0.28, 0);
+    petal.rotateZ(-a);
+    parts.push(petal);
+  }
+  return mergeGeoms(parts);
+}
+function makeButterflyGeom() {
+  // 4 wing teardrops + body
+  const wing = (mx, my, sx, sy) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0);
+    sh.bezierCurveTo(sx * 0.5, sy * 0.6, sx * 0.6, sy * 0.2, 0, 0);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.04, bevelEnabled: false, curveSegments: 8 });
+    g.translate(mx, my, 0);
+    return g;
+  };
+  const body = new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8);
+  body.rotateX(Math.PI / 2);
+  return mergeGeoms([
+    wing(0, 0, 0.5, 0.5),
+    wing(0, 0, -0.5, 0.5),
+    wing(0, 0, 0.4, -0.4),
+    wing(0, 0, -0.4, -0.4),
+    body,
+  ]);
+}
+function makePlanetGeom() {
+  // Sphere + thin ring
+  const ball = new THREE.SphereGeometry(0.32, 20, 16);
+  const ring = new THREE.TorusGeometry(0.5, 0.02, 8, 48);
+  ring.rotateX(Math.PI / 2.4);
+  return mergeGeoms([ball, ring]);
+}
+function makeRocketGeom() {
+  const body = new THREE.CylinderGeometry(0.12, 0.12, 0.55, 16);
+  const nose = new THREE.ConeGeometry(0.12, 0.22, 16); nose.translate(0, 0.385, 0);
+  const fin1 = new THREE.BoxGeometry(0.18, 0.16, 0.04); fin1.translate(0.10, -0.32, 0);
+  const fin2 = new THREE.BoxGeometry(0.18, 0.16, 0.04); fin2.translate(-0.10, -0.32, 0);
+  const exhaust = new THREE.ConeGeometry(0.08, 0.18, 12); exhaust.translate(0, -0.36, 0); exhaust.rotateZ(Math.PI);
+  return mergeGeoms([body, nose, fin1, fin2, exhaust]);
+}
+function makeCubeGeom() {
+  return new THREE.BoxGeometry(0.5, 0.5, 0.5);
+}
+function makeIcosaGeom() {
+  return new THREE.IcosahedronGeometry(0.45, 0);
+}
+function makeTorusKnotGeom() {
+  return new THREE.TorusKnotGeometry(0.28, 0.08, 64, 12);
+}
+function makeArrowGeom() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.45, -0.10);
+  shape.lineTo( 0.05, -0.10);
+  shape.lineTo( 0.05, -0.25);
+  shape.lineTo( 0.45,  0.00);
+  shape.lineTo( 0.05,  0.25);
+  shape.lineTo( 0.05,  0.10);
+  shape.lineTo(-0.45,  0.10);
+  shape.closePath();
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.10, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2 });
+}
+function makeCheckGeom() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.4, 0.0);
+  shape.lineTo(-0.10, -0.30);
+  shape.lineTo( 0.40,  0.30);
+  shape.lineTo( 0.30,  0.40);
+  shape.lineTo(-0.10, -0.05);
+  shape.lineTo(-0.32,  0.13);
+  shape.closePath();
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.10, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.025, bevelSegments: 2 });
+}
+function makeQuestionGeom() {
+  // Approximated '?': torus arc + dot
+  const arc = new THREE.TorusGeometry(0.18, 0.06, 10, 24, Math.PI * 1.2);
+  arc.rotateZ(-Math.PI * 0.6);
+  arc.translate(0, 0.18, 0);
+  const stem = new THREE.CylinderGeometry(0.06, 0.06, 0.18, 12);
+  stem.translate(0, -0.05, 0);
+  const dot = new THREE.SphereGeometry(0.08, 12, 10);
+  dot.translate(0, -0.32, 0);
+  return mergeGeoms([arc, stem, dot]);
+}
+function makeExclamationGeom() {
+  const stem = new THREE.CylinderGeometry(0.08, 0.08, 0.5, 12);
+  stem.translate(0, 0.10, 0);
+  const dot = new THREE.SphereGeometry(0.09, 12, 10);
+  dot.translate(0, -0.32, 0);
+  return mergeGeoms([stem, dot]);
+}
+function makeMusicEighthGeom() {
+  // Single eighth (♪) with flag
+  const head = new THREE.SphereGeometry(0.16, 16, 12); head.scale(1.3, 1, 0.5);
+  const stem = new THREE.CylinderGeometry(0.035, 0.035, 0.85, 8); stem.translate(0.18, 0.42, 0);
+  const flag = new THREE.BoxGeometry(0.18, 0.32, 0.04); flag.translate(0.27, 0.70, 0);
+  return mergeGeoms([head, stem, flag]);
+}
+function makeMusicTrebleGeom() {
+  // Stylised treble clef as a stack of tori + curve
+  const t1 = new THREE.TorusGeometry(0.15, 0.05, 8, 24); t1.translate(0, 0.18, 0);
+  const t2 = new THREE.TorusGeometry(0.18, 0.05, 8, 24); t2.translate(0, -0.10, 0);
+  const stem = new THREE.CylinderGeometry(0.04, 0.04, 0.85, 10); stem.translate(0.08, 0.05, 0);
+  return mergeGeoms([t1, t2, stem]);
+}
+function makeCoinGeom() {
+  const c = new THREE.CylinderGeometry(0.32, 0.32, 0.06, 32);
+  c.rotateX(Math.PI / 2);
+  return c;
+}
+function makeAtomGeom() {
+  // Nucleus + 3 ellipse rings rotated around different axes
+  const parts = [new THREE.SphereGeometry(0.10, 16, 12)];
+  const ringGeom = (rotX, rotY) => {
+    const t = new THREE.TorusGeometry(0.36, 0.02, 8, 48);
+    t.rotateX(rotX); t.rotateY(rotY);
+    return t;
+  };
+  parts.push(ringGeom(Math.PI / 2, 0));
+  parts.push(ringGeom(Math.PI / 3, Math.PI / 3));
+  parts.push(ringGeom(Math.PI / 3, -Math.PI / 3));
+  return mergeGeoms(parts);
+}
+function makeYinYangGeom() {
+  // Disc + central bar; visually approximating yin yang as a flat disc
+  const ring = new THREE.CylinderGeometry(0.40, 0.40, 0.10, 32);
+  ring.rotateX(Math.PI / 2);
+  return ring;
+}
+function makeRibbonGeom() {
+  // Twisted ribbon — narrow bent box
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.4, -0.05); shape.lineTo(0.4, -0.05);
+  shape.lineTo(0.4, 0.05);   shape.lineTo(-0.4, 0.05);
+  shape.closePath();
+  const path = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.4, 0, 0),
+    new THREE.Vector3(-0.1, 0.2, 0.05),
+    new THREE.Vector3(0.1, -0.2, -0.05),
+    new THREE.Vector3(0.4, 0, 0),
+  ]);
+  return new THREE.TubeGeometry(path, 24, 0.05, 8, false);
+}
+function makeRosePetalGeom() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.bezierCurveTo(0.2, 0.1, 0.3, 0.4, 0, 0.5);
+  shape.bezierCurveTo(-0.3, 0.4, -0.2, 0.1, 0, 0);
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 });
+}
+
 // Merge helper using three's BufferGeometryUtils (lazy-loaded elsewhere; here
 // we accept that merging is asynchronous-safe through our cached `_bgU`).
 function mergeGeoms(arr) {
@@ -224,21 +440,62 @@ function mergeGeoms(arr) {
   return arr[0];
 }
 
+// Categorised decorations for the UI.
+const DECORATION_CATEGORIES = [
+  { id: 'symbols', name: 'Symbols', items: [
+    { id: 'star',        name: '⭐ Star',         make: makeStarGeom },
+    { id: 'heart',       name: '❤ Heart',         make: makeHeartGeom },
+    { id: 'sparkle',     name: '✦ Sparkle',       make: makeSparkleGeom,   emissiveDefault: 1.5 },
+    { id: 'crown',       name: '👑 Crown',        make: makeCrownGeom },
+    { id: 'diamond',     name: '💎 Diamond',      make: makeDiamondGeom,   glassy: true },
+    { id: 'bolt',        name: '⚡ Lightning',     make: makeBoltGeom,      emissiveDefault: 1.8 },
+    { id: 'flame',       name: '🔥 Flame',        make: makeFlameGeom,     emissiveDefault: 2.0 },
+    { id: 'arrow',       name: '➤ Arrow',         make: makeArrowGeom },
+    { id: 'check',       name: '✓ Checkmark',     make: makeCheckGeom },
+    { id: 'question',    name: '? Question',      make: makeQuestionGeom },
+    { id: 'exclaim',     name: '! Exclaim',       make: makeExclamationGeom },
+  ]},
+  { id: 'music', name: 'Music', items: [
+    { id: 'note',        name: '♩ Quarter Note',  make: makeNoteGeom },
+    { id: 'note2',       name: '♫ Beamed Notes',  make: makeDoubleNoteGeom },
+    { id: 'noteEighth',  name: '♪ Eighth Note',   make: makeMusicEighthGeom },
+    { id: 'treble',      name: '𝄞 Treble Clef',   make: makeMusicTrebleGeom },
+  ]},
+  { id: 'nature', name: 'Nature', items: [
+    { id: 'sun',         name: '☀ Sun',           make: makeSunGeom,       emissiveDefault: 1.5 },
+    { id: 'moon',        name: '☾ Moon',          make: makeMoonGeom,      emissiveDefault: 0.4 },
+    { id: 'cloud',       name: '☁ Cloud',         make: makeCloudGeom },
+    { id: 'snowflake',   name: '❄ Snowflake',     make: makeSnowflakeGeom },
+    { id: 'leaf',        name: '🍃 Leaf',         make: makeLeafGeom },
+    { id: 'flower',      name: '🌸 Flower',       make: makeFlowerGeom },
+    { id: 'rosePetal',   name: '🌹 Rose Petal',   make: makeRosePetalGeom },
+    { id: 'butterfly',   name: '🦋 Butterfly',    make: makeButterflyGeom },
+  ]},
+  { id: 'geometry', name: 'Geometry', items: [
+    { id: 'cube',        name: '◻ Cube',          make: makeCubeGeom },
+    { id: 'icosa',       name: '◊ Icosahedron',   make: makeIcosaGeom },
+    { id: 'torusKnot',   name: '⌬ Torus Knot',    make: makeTorusKnotGeom },
+    { id: 'ring',        name: '○ Ring',          make: makeRingGeom },
+    { id: 'spiral',      name: '@ Spiral',        make: makeSpiralGeom },
+    { id: 'bubble',      name: '○ Bubble',        make: makeBubbleGeom,    glassy: true },
+    { id: 'ribbon',      name: '〰 Ribbon',       make: makeRibbonGeom },
+  ]},
+  { id: 'space', name: 'Space', items: [
+    { id: 'planet',      name: '🪐 Planet',       make: makePlanetGeom },
+    { id: 'rocket',      name: '🚀 Rocket',       make: makeRocketGeom,    emissiveDefault: 0.5 },
+    { id: 'atom',        name: '⚛ Atom',         make: makeAtomGeom,       emissiveDefault: 0.6 },
+  ]},
+  { id: 'misc', name: 'Misc', items: [
+    { id: 'chain',       name: '⛓ Chain Link',    make: makeChainLink, ring: true },
+    { id: 'coin',        name: '🪙 Coin',         make: makeCoinGeom },
+    { id: 'yinyang',     name: '☯ Disc',          make: makeYinYangGeom },
+  ]},
+];
+
+// Flattened lookup with backward-compatible "none" sentinel.
 const DECORATIONS = [
-  { id: 'none',    name: 'None' },
-  { id: 'star',    name: '⭐ Stars',         emissiveDefault: 0,   make: makeStarGeom },
-  { id: 'heart',   name: '❤ Hearts',         emissiveDefault: 0,   make: makeHeartGeom },
-  { id: 'note',    name: '♪ Music Notes',    emissiveDefault: 0,   make: makeNoteGeom },
-  { id: 'note2',   name: '♫ Beamed Notes',   emissiveDefault: 0,   make: makeDoubleNoteGeom },
-  { id: 'chain',   name: '⛓ Chain Links',    emissiveDefault: 0,   make: makeChainLink, ring: true },
-  { id: 'sparkle', name: '✦ Sparkles',       emissiveDefault: 1.5, make: makeSparkleGeom },
-  { id: 'diamond', name: '💎 Diamonds',      emissiveDefault: 0,   make: makeDiamondGeom, glassy: true },
-  { id: 'crown',   name: '👑 Crowns',        emissiveDefault: 0,   make: makeCrownGeom },
-  { id: 'bolt',    name: '⚡ Lightning',      emissiveDefault: 1.8, make: makeBoltGeom },
-  { id: 'ring',    name: '○ Rings',          emissiveDefault: 0,   make: makeRingGeom },
-  { id: 'flame',   name: '🔥 Flames',        emissiveDefault: 2.0, make: makeFlameGeom },
-  { id: 'bubble',  name: '○ Bubbles',        emissiveDefault: 0,   make: makeBubbleGeom, glassy: true },
-  { id: 'spiral',  name: '@ Spirals',        emissiveDefault: 0,   make: makeSpiralGeom },
+  { id: 'none', name: 'None' },
+  ...DECORATION_CATEGORIES.flatMap(cat => cat.items),
 ];
 
 // ============ DEFAULTS / STATE ============
@@ -267,12 +524,8 @@ const DEFAULTS = {
   innerBevelSize: 0.10,            // Photoshop "Size" — how far the bevel extends
   innerBevelSoften: 0,             // Photoshop "Soften" — 0 = razor sharp, 1 = smooth
   innerBevelDirection: 'up',       // 'up' = raised, 'down' = engraved
-  innerBevelHighlight: '#ffffff',
-  innerBevelShadow: '#000000',
-  innerBevelHighlightOpacity: 0.75,
-  innerBevelShadowOpacity: 0.75,
-  innerBevelAngle: 120,            // light angle in degrees
-  innerBevelAltitude: 30,
+  innerBevelTintOn: false,         // override cap colour with innerBevelHighlight
+  innerBevelHighlight: '#ffd166',  // Photoshop "Highlight Color" — drives cap colour when tint is on
   innerBevelResolution: 512,       // distance-field resolution per axis
 
   // Material — base
@@ -332,10 +585,14 @@ const DEFAULTS = {
   showShadows: true,
   showGrid: false,
   gridColor: '#252932',
+  reflectiveFloor: false,
+  reflectiveFloorOpacity: 0.45,
 
   // Camera
   fov: 32,
   orthographic: false,
+  cameraShakeOn: false,
+  cameraShakeAmount: 0.4,
 
   // Post-processing
   bloomOn: false,
@@ -350,9 +607,32 @@ const DEFAULTS = {
   chromaticAmount: 0.003,
   grainOn: false,
   grainAmount: 0.08,
+  pixelateOn: false,
+  pixelateSize: 6,
+
+  // Layer effects (Photoshop-style)
+  dropShadowOn: false,
+  dropShadowColor: '#000000',
+  dropShadowOpacity: 0.6,
+  dropShadowBlur: 0.10,        // visual blur via duplicate-mesh offset (cheap proxy)
+  dropShadowDistance: 0.20,
+  dropShadowAngle: 135,        // degrees
+  outerGlowOn: false,
+  outerGlowColor: '#7dd3fc',
+  outerGlowSize: 0.10,
+  outerGlowIntensity: 1.5,
+
+  // Particles
+  particlesType: 'none',       // none | snow | embers | dust | leaves | rain | bokeh
+  particlesCount: 200,
+  particlesColor: '#ffffff',
+  particlesSpeed: 1.0,
+  particlesSize: 0.04,
+  particlesEmissive: 0.5,
 
   // 3D Decorations (chains, music notes, stars, hearts, etc.)
   decorationType: 'none',      // see DECORATIONS below
+  decorationCategory: 'all',   // filters icon grid in the panel
   decorationCount: 14,
   decorationScale: 1.0,
   decorationSpread: 1.6,       // how far around the text they sit
@@ -480,6 +760,18 @@ scene.add(textGroup);
 const decorationsGroup = new THREE.Group();
 scene.add(decorationsGroup);
 
+// ============ PARTICLES ============
+// One reusable Points object; geometry is rebuilt when type/count changes.
+const particlesGroup = new THREE.Group();
+scene.add(particlesGroup);
+let particleSystem = null;     // { points, velocities, kind, bounds }
+
+// ============ REFLECTIVE FLOOR ============
+// A polished mirror-like floor disk; toggled separately from the shadow plane.
+const reflectorGroup = new THREE.Group();
+scene.add(reflectorGroup);
+let reflectorMesh = null;
+
 // PMREM for HDRI
 const pmrem = new THREE.PMREMGenerator(renderer);
 pmrem.compileEquirectangularShader();
@@ -491,6 +783,7 @@ let vignettePass = null;
 let chromaticPass = null;
 let grainPass = null;
 let bloomTintPass = null;
+let pixelatePass = null;
 
 const VignetteShader = {
   uniforms: { tDiffuse: { value: null }, intensity: { value: 0.5 } },
@@ -547,6 +840,22 @@ const BloomTintShader = {
     }`,
 };
 
+// Pixelate the rendered image — fun retro / glitch effect.
+const PixelateShader = {
+  uniforms: { tDiffuse: { value: null }, pixelSize: { value: 6 }, resolution: { value: new THREE.Vector2(1024, 768) } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float pixelSize; uniform vec2 resolution; varying vec2 vUv;
+    void main(){
+      vec2 dx = vec2(pixelSize / resolution.x, 0.0);
+      vec2 dy = vec2(0.0, pixelSize / resolution.y);
+      vec2 uv = vec2(
+        floor(vUv.x / dx.x) * dx.x + dx.x * 0.5,
+        floor(vUv.y / dy.y) * dy.y + dy.y * 0.5
+      );
+      gl_FragColor = texture2D(tDiffuse, uv);
+    }`,
+};
+
 function ensureComposer() {
   if (composer) return composer;
   composer = new EffectComposer(renderer);
@@ -577,12 +886,18 @@ function ensureComposer() {
   grainPass.enabled = state.grainOn;
   composer.addPass(grainPass);
 
+  pixelatePass = new ShaderPass(PixelateShader);
+  pixelatePass.uniforms.pixelSize.value = state.pixelateSize;
+  pixelatePass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
+  pixelatePass.enabled = state.pixelateOn;
+  composer.addPass(pixelatePass);
+
   composer.addPass(new OutputPass());
   return composer;
 }
 
 function postEnabled() {
-  return state.bloomOn || state.vignetteOn || state.chromaticOn || state.grainOn;
+  return state.bloomOn || state.vignetteOn || state.chromaticOn || state.grainOn || state.pixelateOn;
 }
 
 // ============ FONT LOADING ============
@@ -776,6 +1091,7 @@ function buildSharpChiselCap(bodyGeom) {
 
   const mesh = new THREE.Mesh(cap, capMat);
   mesh.userData.disposableMaterial = true;
+  mesh.userData.bevelCap = true;
   // Direction: 'down' = engraved (flip pyramid so it goes into the body).
   if (state.innerBevelDirection === 'down') mesh.scale.z = -1;
   return mesh;
@@ -888,6 +1204,7 @@ function buildSmoothBevelCap(bodyGeom) {
 
   const mesh = new THREE.Mesh(plane, capMat);
   mesh.userData.disposableMaterial = true;
+  mesh.userData.bevelCap = true;
   return mesh;
 }
 
@@ -1011,6 +1328,53 @@ function updateText() {
   const mat = pickActiveMaterial();
 
   function addInstance(mirror) {
+    // Drop shadow — render BEFORE the body, dark + offset + slightly behind.
+    if (state.dropShadowOn) {
+      const shadowMat = new THREE.MeshBasicMaterial({
+        color: state.dropShadowColor,
+        transparent: true,
+        opacity: state.dropShadowOpacity,
+        depthWrite: false,
+      });
+      const sh = new THREE.Mesh(body, shadowMat);
+      const ang = (state.dropShadowAngle * Math.PI) / 180;
+      sh.position.x = Math.cos(ang) * state.dropShadowDistance;
+      sh.position.y = -Math.sin(ang) * state.dropShadowDistance;
+      sh.position.z = -0.01 - state.dropShadowBlur * 0.2;
+      // Cheap "blur" approximation: scale up slightly. Real gaussian blur would
+      // need a separate render target which we skip to keep this lightweight.
+      const s = 1 + state.dropShadowBlur * 0.4;
+      sh.scale.set(s, s, 1);
+      if (mirror) {
+        sh.scale.x *= mirror.x ? -1 : 1;
+        sh.scale.y *= mirror.y ? -1 : 1;
+      }
+      sh.userData.disposableMaterial = true;
+      textGroup.add(sh);
+    }
+
+    // Outer glow — additive bright shell behind, scaled up
+    if (state.outerGlowOn) {
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: state.outerGlowColor,
+        transparent: true,
+        opacity: Math.min(1, state.outerGlowIntensity * 0.4),
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.BackSide,
+      });
+      const g = new THREE.Mesh(body, glowMat);
+      const s = 1 + state.outerGlowSize * 2;
+      g.scale.set(s, s, 1);
+      g.position.z = -0.005;
+      if (mirror) {
+        g.scale.x *= mirror.x ? -1 : 1;
+        g.scale.y *= mirror.y ? -1 : 1;
+      }
+      g.userData.disposableMaterial = true;
+      textGroup.add(g);
+    }
+
     const mesh = new THREE.Mesh(body, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -1063,6 +1427,193 @@ function updateText() {
 // Stable per-instance "seeds" so animation looks consistent between rebuilds.
 function hashSeed(i, k = 0) {
   return ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+}
+
+// ============ PARTICLES ============
+// Builds an animated point cloud whose physics depends on the chosen kind.
+function rebuildParticles() {
+  // Tear down existing
+  while (particlesGroup.children.length) {
+    const c = particlesGroup.children.pop();
+    if (c.geometry) c.geometry.dispose();
+    if (c.material && c.material.dispose) c.material.dispose();
+  }
+  particleSystem = null;
+  if (state.particlesType === 'none' || state.particlesCount <= 0) return;
+
+  const N = Math.max(10, Math.min(2000, state.particlesCount));
+  const positions = new Float32Array(N * 3);
+  const velocities = new Float32Array(N * 3);
+
+  // Range box where particles live around the text
+  const RX = 5, RY = 3, RZ = 3;
+
+  for (let i = 0; i < N; i++) {
+    const ix = i * 3;
+    positions[ix    ] = (Math.random() - 0.5) * RX * 2;
+    positions[ix + 1] = (Math.random() - 0.5) * RY * 2;
+    positions[ix + 2] = (Math.random() - 0.5) * RZ * 2;
+    // velocities depend on kind
+    initParticleVel(state.particlesType, velocities, ix);
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  const mat = new THREE.PointsMaterial({
+    color: state.particlesColor,
+    size: state.particlesSize,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.9,
+    blending: state.particlesEmissive > 0.5 ? THREE.AdditiveBlending : THREE.NormalBlending,
+    depthWrite: false,
+    map: makeParticleSprite(),
+  });
+  const points = new THREE.Points(geom, mat);
+  particlesGroup.add(points);
+  particleSystem = { points, velocities, kind: state.particlesType, bounds: { RX, RY, RZ } };
+}
+
+function initParticleVel(kind, vel, ix) {
+  switch (kind) {
+    case 'snow':
+      vel[ix    ] = (Math.random() - 0.5) * 0.05;
+      vel[ix + 1] = -0.18 - Math.random() * 0.15;
+      vel[ix + 2] = (Math.random() - 0.5) * 0.05;
+      break;
+    case 'rain':
+      vel[ix    ] = (Math.random() - 0.5) * 0.04;
+      vel[ix + 1] = -1.4 - Math.random() * 0.6;
+      vel[ix + 2] = 0;
+      break;
+    case 'embers':
+      vel[ix    ] = (Math.random() - 0.5) * 0.10;
+      vel[ix + 1] = 0.30 + Math.random() * 0.40;
+      vel[ix + 2] = (Math.random() - 0.5) * 0.10;
+      break;
+    case 'dust':       // slow magic dust drifting
+    case 'bokeh':
+      vel[ix    ] = (Math.random() - 0.5) * 0.08;
+      vel[ix + 1] = (Math.random() - 0.5) * 0.08 + 0.04;
+      vel[ix + 2] = (Math.random() - 0.5) * 0.08;
+      break;
+    case 'leaves':
+      vel[ix    ] = (Math.random() - 0.5) * 0.20;
+      vel[ix + 1] = -0.20 - Math.random() * 0.15;
+      vel[ix + 2] = (Math.random() - 0.5) * 0.10;
+      break;
+    default:
+      vel[ix] = vel[ix + 1] = vel[ix + 2] = 0;
+  }
+}
+
+// Tiny radial gradient sprite — gives the points a soft round look.
+let _particleSprite = null;
+function makeParticleSprite() {
+  if (_particleSprite) return _particleSprite;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.6)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  _particleSprite = new THREE.CanvasTexture(c);
+  _particleSprite.colorSpace = THREE.SRGBColorSpace;
+  return _particleSprite;
+}
+
+function animateParticles(dt, totalT) {
+  if (!particleSystem) return;
+  const { points, velocities, kind, bounds } = particleSystem;
+  const pos = points.geometry.attributes.position;
+  const arr = pos.array;
+  const speed = state.particlesSpeed * dt * 5; // global tempo
+
+  for (let i = 0; i < arr.length; i += 3) {
+    // Add a swirl/wobble depending on kind
+    if (kind === 'leaves' || kind === 'dust' || kind === 'bokeh') {
+      const phase = i * 0.13 + totalT * 1.5;
+      arr[i    ] += (Math.sin(phase) * 0.04 + velocities[i    ]) * speed;
+      arr[i + 1] += (velocities[i + 1] + Math.sin(phase * 0.5) * 0.02) * speed;
+      arr[i + 2] += (Math.cos(phase) * 0.04 + velocities[i + 2]) * speed;
+    } else if (kind === 'snow') {
+      arr[i    ] += (Math.sin(totalT + i) * 0.03 + velocities[i    ]) * speed;
+      arr[i + 1] += velocities[i + 1] * speed;
+      arr[i + 2] += velocities[i + 2] * speed;
+    } else {
+      arr[i    ] += velocities[i    ] * speed;
+      arr[i + 1] += velocities[i + 1] * speed;
+      arr[i + 2] += velocities[i + 2] * speed;
+    }
+
+    // Wrap or recycle when out of bounds
+    const { RX, RY, RZ } = bounds;
+    if (kind === 'embers') {
+      if (arr[i + 1] > RY)      { arr[i + 1] = -RY; arr[i] = (Math.random() - 0.5) * RX * 2; arr[i + 2] = (Math.random() - 0.5) * RZ * 2; }
+    } else {
+      // Generic wrap
+      if (arr[i + 1] < -RY)     arr[i + 1] = RY;
+      if (arr[i + 1] >  RY)     arr[i + 1] = -RY;
+    }
+    if (arr[i    ] < -RX) arr[i    ] = RX;
+    if (arr[i    ] >  RX) arr[i    ] = -RX;
+    if (arr[i + 2] < -RZ) arr[i + 2] = RZ;
+    if (arr[i + 2] >  RZ) arr[i + 2] = -RZ;
+  }
+  pos.needsUpdate = true;
+}
+
+function applyParticleStyling() {
+  if (!particleSystem) return;
+  const m = particleSystem.points.material;
+  m.color.set(state.particlesColor);
+  m.size = state.particlesSize;
+  m.blending = state.particlesEmissive > 0.5 ? THREE.AdditiveBlending : THREE.NormalBlending;
+  m.opacity = 0.6 + state.particlesEmissive * 0.3;
+  m.needsUpdate = true;
+}
+
+// ============ REFLECTIVE FLOOR ============
+function rebuildReflectiveFloor() {
+  while (reflectorGroup.children.length) {
+    const c = reflectorGroup.children.pop();
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) c.material.dispose();
+  }
+  reflectorMesh = null;
+  if (!state.reflectiveFloor) return;
+  // Use a glossy metal-ish floor — true planar reflection (Reflector) needs
+  // an extra render pass which we skip for simplicity. This still looks great.
+  const geom = new THREE.CircleGeometry(8, 64);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: '#0a0a0d',
+    roughness: 0.05,
+    metalness: 1.0,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    envMapIntensity: 1.5,
+    transparent: true,
+    opacity: state.reflectiveFloorOpacity,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = -1.149;
+  mesh.receiveShadow = true;
+  reflectorGroup.add(mesh);
+  reflectorMesh = mesh;
+}
+
+// Resolves the active list of decoration items based on the selected category.
+function resolveDecorationItems() {
+  if (state.decorationCategory === 'all') {
+    return DECORATION_CATEGORIES.flatMap(c => c.items);
+  }
+  const cat = DECORATION_CATEGORIES.find(c => c.id === state.decorationCategory);
+  return cat ? cat.items : [];
 }
 
 function rebuildDecorations() {
@@ -1302,10 +1853,13 @@ function applyMaterial() {
   outlineMaterial.color.set(state.outlineColor);
 
   // Bevel-cap material clones — keep them in sync with the body's material.
+  // Use a separate `bevelCap` flag because drop-shadow / outer-glow meshes
+  // also use `disposableMaterial=true` but should keep their own colours.
   textGroup.traverse((obj) => {
-    if (obj.isMesh && obj.userData && obj.userData.disposableMaterial && obj.material) {
+    if (obj.isMesh && obj.userData && obj.userData.bevelCap && obj.material) {
       const m = obj.material;
-      if (m.color) m.color.set(state.color);
+      const capColor = state.innerBevelTintOn ? state.innerBevelHighlight : state.color;
+      if (m.color) m.color.set(capColor);
       if ('roughness' in m) m.roughness = state.roughness;
       if ('metalness' in m) m.metalness = state.metalness;
       if ('clearcoat' in m) m.clearcoat = state.clearcoat;
@@ -1582,6 +2136,11 @@ function buildPanel() {
       b.appendChild(el('p', { class: 'hint' }, [
         'Chisel Hard = острый pyramidal ridge через TextGeometry. Soften > 0 даёт более мягкий гребень. Quality влияет только на Smooth/Pillow.',
       ]));
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(makeToggle('Tint Bevel', 'innerBevelTintOn', 'Highlight color override (Photoshop "Highlight Color")'));
+      if (state.innerBevelTintOn) {
+        b.appendChild(makeColor('Highlight Color', 'innerBevelHighlight'));
+      }
 
       // Quick presets — tuned to look polished out-of-the-box
       const presets = [
@@ -1690,10 +2249,35 @@ function buildPanel() {
 
   // ========== DECORATIONS (3D items around the text) ==========
   panel.appendChild(makeSection('decorations', '🎁 3D Decorations', '🎁', (b) => {
-    b.appendChild(makeSelect('Type', 'decorationType',
-      DECORATIONS.map(d => ({ value: d.id, label: d.name }))
+    // Category dropdown — keeps the long item list manageable
+    b.appendChild(makeSelect('Category', 'decorationCategory',
+      [{ value: 'all', label: 'All' }, ...DECORATION_CATEGORIES.map(c => ({ value: c.id, label: c.name }))]
     ));
+
+    // Visual icon grid — replaces the long single dropdown.
+    const items = [{ id: 'none', name: 'None' }, ...resolveDecorationItems()];
+    const iconGrid = el('div', { class: 'preset-grid', style: 'grid-template-columns: repeat(4, 1fr); gap:4px;' });
+    items.forEach(it => {
+      const btn = el('button', {
+        class: 'preset-btn', type: 'button',
+        style: 'justify-content:center; padding:6px 2px; min-height:34px; font-size:14px;',
+        title: it.name,
+      });
+      if (state.decorationType === it.id) { btn.style.background = 'rgba(99,102,241,0.18)'; btn.style.color = '#a5a7f5'; }
+      // Show only the leading symbol for compact view (fall back to short text).
+      const m = it.name.match(/^([\W\d_]+)/);
+      btn.textContent = m && m[1].trim().length ? m[1].trim() : it.name.slice(0, 4);
+      btn.addEventListener('click', () => {
+        pushUndo();
+        state.decorationType = it.id;
+        buildPanel(); rebuildDecorations();
+      });
+      iconGrid.appendChild(btn);
+    });
+    b.appendChild(iconGrid);
+
     if (state.decorationType !== 'none') {
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
       b.appendChild(makeSlider('Count', 'decorationCount', 1, 60, 1, true));
       b.appendChild(makeSlider('Scale', 'decorationScale', 0.2, 3, 0.05));
       b.appendChild(makeSlider('Spread', 'decorationSpread', 0.5, 5, 0.05));
@@ -1713,22 +2297,25 @@ function buildPanel() {
       b.appendChild(resetBtn);
     }
 
-    // Quick "vibe" presets — combinations that look great
+    // Quick "vibe" presets
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
     b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Vibe Presets']));
     const vibes = [
-      { name: '⭐ Stardust',       vals: { decorationType: 'star',    decorationCount: 24, decorationColor: '#ffe066', decorationEmissive: 1.5, decorationScale: 0.7, decorationSpread: 2.4 } },
-      { name: '✦ Sparkle Magic',   vals: { decorationType: 'sparkle', decorationCount: 30, decorationColor: '#ffffff', decorationEmissive: 2.5, decorationScale: 0.6, decorationSpread: 2.2 } },
-      { name: '♫ Music Vibes',     vals: { decorationType: 'note2',   decorationCount: 12, decorationColor: '#a855f7', decorationEmissive: 0.4, decorationScale: 1.0, decorationSpread: 2.5 } },
-      { name: '❤ Love',            vals: { decorationType: 'heart',   decorationCount: 18, decorationColor: '#ff5e9c', decorationEmissive: 0.3, decorationScale: 0.7, decorationSpread: 2.2 } },
-      { name: '⛓ Chained',         vals: { decorationType: 'chain',   decorationCount: 28, decorationColor: '#c8c8c8', decorationMetalness: 1, decorationRoughness: 0.2, decorationScale: 0.9, decorationSpread: 2.8 } },
-      { name: '👑 Royal',          vals: { decorationType: 'crown',   decorationCount: 6,  decorationColor: '#ffd166', decorationMetalness: 1, decorationRoughness: 0.15, decorationScale: 0.9, decorationSpread: 2.8 } },
-      { name: '⚡ Electric',       vals: { decorationType: 'bolt',    decorationCount: 14, decorationColor: '#7dd3fc', decorationEmissive: 2.5, decorationScale: 0.8, decorationSpread: 2.4 } },
-      { name: '💎 Diamonds',       vals: { decorationType: 'diamond', decorationCount: 16, decorationColor: '#bae6fd', decorationScale: 0.6, decorationSpread: 2.4 } },
-      { name: '🔥 Fire Ring',      vals: { decorationType: 'flame',   decorationCount: 16, decorationColor: '#ff6a00', decorationEmissive: 3.0, decorationScale: 0.8, decorationSpread: 2.2 } },
-      { name: '○ Bubbles',         vals: { decorationType: 'bubble',  decorationCount: 22, decorationColor: '#bae6fd', decorationScale: 0.6, decorationSpread: 2.2 } },
-      { name: '@ Galaxy Spirals',  vals: { decorationType: 'spiral',  decorationCount: 8,  decorationColor: '#a855f7', decorationEmissive: 1.0, decorationScale: 1.2, decorationSpread: 2.5 } },
-      { name: '○ Saturn Rings',    vals: { decorationType: 'ring',    decorationCount: 5,  decorationColor: '#ffd166', decorationMetalness: 1, decorationScale: 1.3, decorationSpread: 2.4 } },
+      { name: '⭐ Stardust',       vals: { decorationType: 'star',     decorationCount: 24, decorationColor: '#ffe066', decorationEmissive: 1.5, decorationScale: 0.7, decorationSpread: 2.4 } },
+      { name: '✦ Sparkle Magic',   vals: { decorationType: 'sparkle',  decorationCount: 30, decorationColor: '#ffffff', decorationEmissive: 2.5, decorationScale: 0.6, decorationSpread: 2.2 } },
+      { name: '♫ Music Vibes',     vals: { decorationType: 'note2',    decorationCount: 12, decorationColor: '#a855f7', decorationEmissive: 0.4, decorationScale: 1.0, decorationSpread: 2.5 } },
+      { name: '❤ Love',            vals: { decorationType: 'heart',    decorationCount: 18, decorationColor: '#ff5e9c', decorationEmissive: 0.3, decorationScale: 0.7, decorationSpread: 2.2 } },
+      { name: '⛓ Chained',         vals: { decorationType: 'chain',    decorationCount: 28, decorationColor: '#c8c8c8', decorationMetalness: 1, decorationRoughness: 0.2, decorationScale: 0.9, decorationSpread: 2.8 } },
+      { name: '👑 Royal',          vals: { decorationType: 'crown',    decorationCount: 6,  decorationColor: '#ffd166', decorationMetalness: 1, decorationRoughness: 0.15, decorationScale: 0.9, decorationSpread: 2.8 } },
+      { name: '⚡ Electric',       vals: { decorationType: 'bolt',     decorationCount: 14, decorationColor: '#7dd3fc', decorationEmissive: 2.5, decorationScale: 0.8, decorationSpread: 2.4 } },
+      { name: '💎 Diamonds',       vals: { decorationType: 'diamond',  decorationCount: 16, decorationColor: '#bae6fd', decorationScale: 0.6, decorationSpread: 2.4 } },
+      { name: '🔥 Fire Ring',      vals: { decorationType: 'flame',    decorationCount: 16, decorationColor: '#ff6a00', decorationEmissive: 3.0, decorationScale: 0.8, decorationSpread: 2.2 } },
+      { name: '○ Bubbles',         vals: { decorationType: 'bubble',   decorationCount: 22, decorationColor: '#bae6fd', decorationScale: 0.6, decorationSpread: 2.2 } },
+      { name: '🪐 Cosmos',         vals: { decorationType: 'planet',   decorationCount: 5,  decorationColor: '#a855f7', decorationScale: 1.0, decorationSpread: 2.6 } },
+      { name: '🚀 Liftoff',        vals: { decorationType: 'rocket',   decorationCount: 6,  decorationColor: '#ffffff', decorationEmissive: 0.4, decorationScale: 0.9, decorationSpread: 2.6 } },
+      { name: '🌸 Garden',         vals: { decorationType: 'flower',   decorationCount: 16, decorationColor: '#ff8aff', decorationScale: 0.7, decorationSpread: 2.3 } },
+      { name: '🦋 Wings',          vals: { decorationType: 'butterfly',decorationCount: 12, decorationColor: '#7dd3fc', decorationScale: 0.9, decorationSpread: 2.4 } },
+      { name: '☀ Sunshine',        vals: { decorationType: 'sun',      decorationCount: 10, decorationColor: '#ffd166', decorationEmissive: 1.5, decorationScale: 0.7, decorationSpread: 2.5 } },
     ];
     const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
     vibes.forEach(v => {
@@ -1772,8 +2359,6 @@ function buildPanel() {
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
     b.appendChild(makeSelect('HDRI', 'envPreset', HDRI_PRESETS.map((p) => ({ value: p.id, label: p.name }))));
     b.appendChild(makeSlider('Env Intensity', 'envIntensity', 0, 3, 0.05));
-    b.appendChild(makeToggle('Ground Shadow', 'showShadows', 'Soft shadow under text'));
-    b.appendChild(makeToggle('Show Grid', 'showGrid', 'Floor grid helper'));
   }));
 
   // ========== LIGHTING ==========
@@ -1862,6 +2447,84 @@ function buildPanel() {
     b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
     b.appendChild(makeToggle('Film Grain', 'grainOn', 'Кинематографическое зерно'));
     if (state.grainOn) b.appendChild(makeSlider('Amount', 'grainAmount', 0, 0.3, 0.005));
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(makeToggle('Pixelate', 'pixelateOn', 'Ретро/глитч-стиль'));
+    if (state.pixelateOn) b.appendChild(makeSlider('Pixel Size', 'pixelateSize', 1, 30, 1, true));
+  }, { collapsed: true }));
+
+  // ========== LAYER EFFECTS (Photoshop-style) ==========
+  panel.appendChild(makeSection('layereffects', '🎨 Layer Effects', '🎨', (b) => {
+    b.appendChild(makeToggle('Drop Shadow', 'dropShadowOn'));
+    if (state.dropShadowOn) {
+      b.appendChild(makeColor('Shadow Color', 'dropShadowColor'));
+      b.appendChild(makeSlider('Opacity', 'dropShadowOpacity', 0, 1, 0.02));
+      b.appendChild(makeSlider('Distance', 'dropShadowDistance', 0, 1, 0.01));
+      b.appendChild(makeSlider('Angle', 'dropShadowAngle', 0, 360, 1, true));
+      b.appendChild(makeSlider('Blur', 'dropShadowBlur', 0, 0.5, 0.01));
+    }
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(makeToggle('Outer Glow', 'outerGlowOn'));
+    if (state.outerGlowOn) {
+      b.appendChild(makeColor('Glow Color', 'outerGlowColor'));
+      b.appendChild(makeSlider('Size', 'outerGlowSize', 0, 0.4, 0.005));
+      b.appendChild(makeSlider('Intensity', 'outerGlowIntensity', 0, 4, 0.05));
+    }
+
+    // Quick preset combos
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Effect Presets']));
+    const fxPresets = [
+      { name: 'Hard Shadow',  vals: { dropShadowOn: true, dropShadowColor: '#000000', dropShadowOpacity: 0.7, dropShadowDistance: 0.18, dropShadowAngle: 135, dropShadowBlur: 0.05, outerGlowOn: false } },
+      { name: 'Soft Shadow',  vals: { dropShadowOn: true, dropShadowColor: '#000000', dropShadowOpacity: 0.5, dropShadowDistance: 0.10, dropShadowAngle: 135, dropShadowBlur: 0.30, outerGlowOn: false } },
+      { name: 'Neon Glow',    vals: { dropShadowOn: false, outerGlowOn: true, outerGlowColor: '#00d4ff', outerGlowSize: 0.18, outerGlowIntensity: 2.0 } },
+      { name: 'Pink Aura',    vals: { dropShadowOn: false, outerGlowOn: true, outerGlowColor: '#ff5e9c', outerGlowSize: 0.14, outerGlowIntensity: 1.6 } },
+      { name: 'Hot Glow',     vals: { dropShadowOn: false, outerGlowOn: true, outerGlowColor: '#ffae00', outerGlowSize: 0.20, outerGlowIntensity: 2.5 } },
+      { name: 'Glow + Shadow',vals: { dropShadowOn: true, dropShadowColor: '#000000', dropShadowOpacity: 0.5, dropShadowDistance: 0.12, dropShadowAngle: 130, dropShadowBlur: 0.20, outerGlowOn: true, outerGlowColor: '#7dd3fc', outerGlowSize: 0.10, outerGlowIntensity: 1.4 } },
+    ];
+    const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+    fxPresets.forEach(p => {
+      const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center;' });
+      btn.textContent = p.name;
+      btn.addEventListener('click', () => {
+        pushUndo();
+        Object.assign(state, p.vals);
+        buildPanel();
+        updateText();
+      });
+      grid.appendChild(btn);
+    });
+    b.appendChild(grid);
+  }, { collapsed: true }));
+
+  // ========== PARTICLES ==========
+  panel.appendChild(makeSection('particles', '❄ Particles', '❄', (b) => {
+    b.appendChild(makeSelect('Type', 'particlesType', [
+      { value: 'none',   label: 'None' },
+      { value: 'snow',   label: '❄ Snow' },
+      { value: 'rain',   label: '☔ Rain' },
+      { value: 'embers', label: '🔥 Embers (rising)' },
+      { value: 'dust',   label: '✨ Magic Dust' },
+      { value: 'leaves', label: '🍃 Falling Leaves' },
+      { value: 'bokeh',  label: '○ Bokeh' },
+    ]));
+    if (state.particlesType !== 'none') {
+      b.appendChild(makeSlider('Count', 'particlesCount', 10, 2000, 10, true));
+      b.appendChild(makeColor('Color', 'particlesColor'));
+      b.appendChild(makeSlider('Size', 'particlesSize', 0.005, 0.4, 0.005));
+      b.appendChild(makeSlider('Speed', 'particlesSpeed', 0, 4, 0.05));
+      b.appendChild(makeSlider('Glow (additive)', 'particlesEmissive', 0, 1, 0.05));
+    }
+  }, { collapsed: true }));
+
+  // ========== FLOOR ==========
+  panel.appendChild(makeSection('floor', '◐ Floor / Ground', '◐', (b) => {
+    b.appendChild(makeToggle('Soft Contact Shadow', 'showShadows'));
+    b.appendChild(makeToggle('Show Grid', 'showGrid'));
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(makeToggle('Reflective Floor', 'reflectiveFloor', 'Глянцевый отражающий пол'));
+    if (state.reflectiveFloor) {
+      b.appendChild(makeSlider('Opacity', 'reflectiveFloorOpacity', 0, 1, 0.02));
+    }
   }, { collapsed: true }));
 
   // ========== CAMERA ==========
@@ -1870,6 +2533,9 @@ function buildPanel() {
     if (!state.orthographic) {
       b.appendChild(makeSlider('FOV', 'fov', 10, 90, 1, true));
     }
+    b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+    b.appendChild(makeToggle('Camera Shake', 'cameraShakeOn', 'Дрожание камеры (cinematic)'));
+    if (state.cameraShakeOn) b.appendChild(makeSlider('Amount', 'cameraShakeAmount', 0, 2, 0.05));
     const btnFrame = el('button', { class: 'btn-secondary', type: 'button' }, ['⛶ Frame Camera']);
     btnFrame.addEventListener('click', frameCamera);
     b.appendChild(btnFrame);
@@ -1970,6 +2636,10 @@ const GEOMETRY_KEYS = new Set([
   'innerBevelSoften', 'innerBevelDirection', 'innerBevelResolution',
   'mirrorX', 'mirrorY', 'outlineOn', 'outlineThickness',
   'letterSpacing', 'lineHeight', 'shadingMode', 'matcapId',
+  // Layer effects (drop shadow + outer glow create extra meshes around the body).
+  'dropShadowOn', 'dropShadowColor', 'dropShadowOpacity', 'dropShadowBlur',
+  'dropShadowDistance', 'dropShadowAngle',
+  'outerGlowOn', 'outerGlowColor', 'outerGlowSize', 'outerGlowIntensity',
 ]);
 const MATERIAL_KEYS = new Set([
   'color', 'roughness', 'metalness', 'clearcoat', 'clearcoatRoughness', 'reflectivity',
@@ -1978,17 +2648,20 @@ const MATERIAL_KEYS = new Set([
   'sheen', 'sheenColor', 'sheenRoughness',
   'iridescence', 'iridescenceIOR', 'iridescenceThickness',
   'outlineColor',
+  'innerBevelTintOn', 'innerBevelHighlight',
 ]);
 
 function handleChange(key) {
   if (key === 'fontId') { setActiveFont().then(updateHud); return; }
   if (GEOMETRY_KEYS.has(key)) {
-    const rebuild = ['bevelEnabled', 'innerBevel', 'innerBevelStyle', 'innerBevelDirection', 'shadingMode', 'outlineOn'].includes(key);
+    const rebuild = ['bevelEnabled', 'innerBevel', 'innerBevelStyle', 'innerBevelDirection', 'innerBevelTintOn', 'shadingMode', 'outlineOn'].includes(key);
     if (rebuild) buildPanel();
     if (['flatShading', 'wireframe', 'matcapId'].includes(key)) applyMaterial();
     updateText();
   }
   if (MATERIAL_KEYS.has(key)) applyMaterial();
+  // Tint toggle needs a panel rebuild so the color picker shows/hides.
+  if (key === 'innerBevelTintOn') buildPanel();
 
   if (['bgMode', 'background', 'bgGradientTop', 'bgGradientBottom'].includes(key)) {
     if (key === 'bgMode') buildPanel();
@@ -2018,19 +2691,38 @@ function handleChange(key) {
        'bloomColor', 'bloomColorMix',
        'vignetteOn', 'vignetteIntensity',
        'chromaticOn', 'chromaticAmount',
-       'grainOn', 'grainAmount'].includes(key)) {
-    if (['bloomOn', 'vignetteOn', 'chromaticOn', 'grainOn'].includes(key)) buildPanel();
+       'grainOn', 'grainAmount',
+       'pixelateOn', 'pixelateSize'].includes(key)) {
+    if (['bloomOn', 'vignetteOn', 'chromaticOn', 'grainOn', 'pixelateOn'].includes(key)) buildPanel();
     updatePostProcessing();
   }
 
   // Decorations
-  if (key === 'decorationType') buildPanel();
+  if (key === 'decorationType' || key === 'decorationCategory') buildPanel();
   if ([
     'decorationType', 'decorationCount', 'decorationScale', 'decorationSpread',
     'decorationColor', 'decorationMetalness', 'decorationRoughness', 'decorationEmissive',
   ].includes(key)) {
     rebuildDecorations();
   }
+
+  // Particles
+  if (['particlesType', 'particlesCount'].includes(key)) {
+    if (key === 'particlesType') buildPanel();
+    rebuildParticles();
+  }
+  if (['particlesColor', 'particlesSize', 'particlesEmissive'].includes(key)) {
+    applyParticleStyling();
+  }
+
+  // Reflective floor
+  if (['reflectiveFloor', 'reflectiveFloorOpacity'].includes(key)) {
+    rebuildReflectiveFloor();
+    if (key === 'reflectiveFloor') buildPanel();
+  }
+
+  // Layer effect bevel-flag rebuilds the panel so sliders show/hide
+  if (['dropShadowOn', 'outerGlowOn'].includes(key)) buildPanel();
 
   if (key === 'showStats') {
     document.getElementById('statsOverlay').style.display = state.showStats ? 'flex' : 'none';
@@ -2101,6 +2793,11 @@ function updatePostProcessing() {
   if (grainPass) {
     grainPass.enabled = state.grainOn;
     grainPass.uniforms.amount.value = state.grainAmount;
+  }
+  if (pixelatePass) {
+    pixelatePass.enabled = state.pixelateOn;
+    pixelatePass.uniforms.pixelSize.value = state.pixelateSize;
+    pixelatePass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
   }
 }
 
@@ -2241,6 +2938,8 @@ function applyAllChanges() {
   updatePostProcessing();
   applyAnimationMode();
   rebuildDecorations();
+  rebuildParticles();
+  rebuildReflectiveFloor();
   controls.autoRotate = state.autoRotate;
   controls.autoRotateSpeed = state.autoRotateSpeed * 2;
   document.getElementById('statsOverlay').style.display = state.showStats ? 'flex' : 'none';
@@ -2354,6 +3053,19 @@ function animate() {
   // Decorations animation (independent of the text animation mode)
   animateDecorations(dt, totalTime);
 
+  // Particles
+  animateParticles(dt, totalTime);
+
+  // Camera shake (applied as a tiny offset before render; restored after)
+  let camShakeOffset = null;
+  if (state.cameraShakeOn) {
+    camShakeOffset = camera.position.clone();
+    const a = state.cameraShakeAmount * 0.05;
+    camera.position.x += (Math.random() - 0.5) * a;
+    camera.position.y += (Math.random() - 0.5) * a;
+    camera.position.z += (Math.random() - 0.5) * a;
+  }
+
   // Update grain shader time uniform so noise actually moves
   if (grainPass) grainPass.uniforms.time.value = totalTime;
 
@@ -2374,6 +3086,9 @@ function animate() {
     renderer.render(scene, camera);
   }
   renderer.autoClear = true;
+
+  // Restore camera offset from shake so OrbitControls keeps working cleanly.
+  if (camShakeOffset) camera.position.copy(camShakeOffset);
 
   // FPS counter
   fpsCounter.frames++;
@@ -2413,6 +3128,8 @@ async function init() {
   await loadHDRI(state.envPreset);
   await setActiveFont();
   rebuildDecorations();
+  rebuildParticles();
+  rebuildReflectiveFloor();
   updateHud();
   loadingOverlay.style.display = 'none';
   animate();
