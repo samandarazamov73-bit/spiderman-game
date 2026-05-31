@@ -1001,6 +1001,7 @@ const DEFAULTS = {
   textLiveReflectionStrength: 1.5,
   textLiveReflectionEvery: 1,    // 1 = every frame, 2 = every other frame, ...
   textLiveReflectionRes: 1024,   // 256 / 512 / 1024 / 2048 — higher = sharper mirror
+  textLiveReflectionDistance: 0.65,  // <1 shrinks the chain in the reflection (zoom out feel)
 
   // Animation
   autoRotate: false,           // simple toggle (back-compat)
@@ -2847,6 +2848,10 @@ function buildPanel() {
         'Текст отражает крутящуюся цепь и сцену в реальном времени'));
       if (state.textLiveReflections) {
         b.appendChild(makeSlider('Reflection Strength', 'textLiveReflectionStrength', 0, 4, 0.05));
+        b.appendChild(makeSlider('Reflection Distance', 'textLiveReflectionDistance', 0.2, 1.0, 0.02));
+        b.appendChild(el('p', { class: 'hint' }, [
+          'Reflection Distance < 1 → цепь выглядит МЕНЬШЕ в отражении (как будто дальше). 1 = настоящий размер.',
+        ]));
         b.appendChild(makeSlider('Update Every N Frames', 'textLiveReflectionEvery', 1, 6, 1, true));
         // Quality / resolution — higher = sharper mirror, more GPU.
         b.appendChild(makeSelect('Quality', 'textLiveReflectionRes', [
@@ -2854,6 +2859,24 @@ function buildPanel() {
           { value: 512,  label: '512² (good)' },
           { value: 1024, label: '1024² (mirror) ⭐' },
           { value: 2048, label: '2048² (ultra)' },
+        ]));
+
+        // Tint color — works on Mirror/Chrome (metals tint reflections by
+        // their colour). On Glass/Crystal it tints the surface itself.
+        b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+        b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Mirror Tint']));
+        b.appendChild(makeColor('Tint Color', 'color'));
+        // Quick colour swatches so the user can audition tints fast.
+        const tintRow = el('div', { class: 'bg-swatch-row' });
+        ['#ffffff','#ffd166','#ff5e9c','#7dd3fc','#a855f7','#22d3ee','#f97316','#000000'].forEach((c) => {
+          const sw = el('button', { class: 'bg-swatch' + (state.color.toLowerCase() === c.toLowerCase() ? ' active' : ''), type: 'button' });
+          sw.style.background = c;
+          sw.addEventListener('click', () => { pushUndo(); state.color = c; buildPanel(); applyMaterial(); });
+          tintRow.appendChild(sw);
+        });
+        b.appendChild(tintRow);
+        b.appendChild(el('p', { class: 'hint' }, [
+          'На Perfect Mirror цвет «красит» отражения как настоящий металл (золото / медь / хром). На Glass/Crystal — окрашивает само стекло.',
         ]));
 
         // One-click presets that flip the right material flags for a
@@ -2880,12 +2903,13 @@ function buildPanel() {
         const fxPresets = [
           // 🪞 PERFECT MIRROR — opaque, polished metal that reflects 100%
           // of incoming light. metalness=1 + roughness=0 + a high envMap
-          // intensity = the surface IS the reflection. Color near-white
-          // because metallic surfaces tint reflections; pure white = neutral.
+          // intensity = the surface IS the reflection. Color is preserved
+          // from the user's current selection — metals tint reflections by
+          // their colour, so this lets the user pick gold / chrome / pink
+          // mirror with one extra click.
           { name: '🪞 Perfect Mirror', vals: { ...baseReset,
             metalness: 1, roughness: 0,
             clearcoat: 0, clearcoatRoughness: 0,    // no coat — pure metal
-            color: '#ffffff',
             textLiveReflectionStrength: 3.0,
             textLiveReflectionRes: 1024,
           }},
@@ -2902,7 +2926,6 @@ function buildPanel() {
           { name: '✨ Chrome',         vals: { ...baseReset,
             metalness: 1, roughness: 0.05,
             clearcoat: 1, clearcoatRoughness: 0.02,
-            color: '#ffffff',
             textLiveReflectionStrength: 2.5,
             textLiveReflectionRes: 1024,
           }},
@@ -4508,6 +4531,21 @@ function animate() {
     if (_reflectionFrame % every === 0) {
       const wasVisible = textGroup.visible;
       textGroup.visible = false;
+
+      // Reflection "zoom out" — temporarily shrink the surrounding scene
+      // objects so the chain / decorations / particles appear smaller and
+      // farther away inside the mirror. distance < 1 = more zoom-out feel,
+      // = 1 means objects appear at their actual size in the reflection.
+      const distance = THREE.MathUtils.clamp(state.textLiveReflectionDistance, 0.2, 1.0);
+      const savedNecklaceScale  = necklacePivot.scale.clone();
+      const savedDecoScale      = decorationsGroup.scale.clone();
+      const savedParticlesScale = particlesGroup.scale.clone();
+      if (distance < 0.999) {
+        necklacePivot.scale.multiplyScalar(distance);
+        decorationsGroup.scale.multiplyScalar(distance);
+        particlesGroup.scale.multiplyScalar(distance);
+      }
+
       // Position the cube cam at the text's centre (after the animation has
       // moved/scaled the group, so reflections track the text's transform).
       reflectionCubeCamera.position.set(0, 0, 0);
@@ -4516,7 +4554,13 @@ function animate() {
       textGroup.getWorldPosition(wp);
       reflectionCubeCamera.position.copy(wp);
       reflectionCubeCamera.update(renderer, scene);
+
+      // Restore everything we touched
+      necklacePivot.scale.copy(savedNecklaceScale);
+      decorationsGroup.scale.copy(savedDecoScale);
+      particlesGroup.scale.copy(savedParticlesScale);
       textGroup.visible = wasVisible;
+
       // Inject the live cube map as the PBR material's envMap. envMapIntensity
       // controls how strongly the reflection blends with HDRI lighting.
       if (pbrMaterial.envMap !== reflectionRT.texture) {
