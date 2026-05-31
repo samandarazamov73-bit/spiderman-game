@@ -721,9 +721,9 @@ function mergeBufferGeometriesFallback(geoms) {
 function buildInnerBevelCap(bodyGeom) {
   if (!bodyGeom.boundingBox) bodyGeom.computeBoundingBox();
 
-  // Chisel Hard → true prismatic medial-axis displacement (no plateau).
+  // Chisel Hard → SDF fragment shader on a flat quad. No 3D geometry artifacts.
   if (state.innerBevelStyle === 'chiselHard') {
-    return buildPrismaticChiselCap(bodyGeom);
+    return buildSDFShaderCap(bodyGeom);
   }
   // Chisel Soft / Stroke → TextGeometry trick (constant-width slopes).
   if (state.innerBevelStyle === 'chiselSoft' || state.innerBevelStyle === 'stroke') {
@@ -732,30 +732,23 @@ function buildInnerBevelCap(bodyGeom) {
   return buildSmoothBevelCap(bodyGeom);
 }
 
-// ---------- TRUE PRISMATIC CHISEL HARD ----------
-// Slopes go all the way from glyph outline to the medial axis (the "skeleton"
-// of each stroke). No plateau on the front face. The ridge runs along the
-// medial axis; corners produce miter joints automatically because the
-// distance field is C¹-discontinuous there. Razor-sharp via:
-//   1. Linear height = D × scale  (no clamping → no plateau)
-//   2. High-res grid (resolution slider drives subdivisions)
-//   3. Non-indexed buffer geometry → no normal averaging across the ridge
-//   4. flatShading = true on the material
-function buildPrismaticChiselCap(bodyGeom) {
+// ---------- GLYPH SDF (shared rasterization helper) ----------
+// Returns the signed-distance field of the current text as a Float32Array
+// (positive = inside, 0 = outside) plus all the metadata needed to map
+// world-space UVs onto it.
+function computeGlyphSDF(bodyGeom) {
   const bb = bodyGeom.boundingBox;
   const padPx = 24;
   const w = bb.max.x - bb.min.x;
   const h = bb.max.y - bb.min.y;
   if (w < 0.001 || h < 0.001) return null;
 
-  // Render-resolution; higher = sharper miters at the cost of memory.
-  const targetMax = Math.min(640, Math.max(256, state.innerBevelResolution));
+  const targetMax = Math.min(1024, Math.max(256, state.innerBevelResolution));
   const aspect = w / h;
   let texW, texH;
   if (aspect >= 1) { texW = targetMax; texH = Math.max(96, Math.round(targetMax / aspect)); }
   else            { texH = targetMax; texW = Math.max(96, Math.round(targetMax * aspect)); }
 
-  // 1. Rasterize silhouette via the same font shape paths as the 3D body.
   const canvas = document.createElement('canvas');
   canvas.width = texW + padPx * 2;
   canvas.height = texH + padPx * 2;
@@ -788,84 +781,202 @@ function buildPrismaticChiselCap(bodyGeom) {
   const W = canvas.width, H = canvas.height;
   const inside = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) inside[i] = img.data[i * 4] > 128 ? 1 : 0;
-
-  // 2. Exact EDT (px distance to nearest exterior pixel).
   const dist = exactEDT(inside, W, H);
 
-  // 3. Build a high-density grid plane covering the bbox.
-  //    Resolution roughly matches the rasterization grid so each cell maps to
-  //    1–2 pixels of the distance field — that's what gives us crisp miters.
-  const segX = Math.min(380, Math.max(120, Math.round(texW / 1.4)));
-  const segY = Math.min(380, Math.max(120, Math.round(texH / 1.4)));
-  const plane = new THREE.PlaneGeometry(w, h, segX, segY);
-  const pos = plane.attributes.position;
+  return { dist, W, H, padPx, texW, texH, drawScale, w, h };
+}
 
-  // 4. Photoshop "Depth" maps to overall height; "Size" is auto from medial.
-  //    `heightPerPx` converts pixel-distance into world-space ridge height.
-  //    The factor 0.018 was tuned so Depth=1 looks like a moderately raised
-  //    bevel without overpowering the body.
-  const heightPerPx = 0.018 * state.innerBevelDepth * (state.size / drawScale * drawScale) / 1.0;
-  const heightScale = state.innerBevelDepth * 0.045 / Math.max(0.0001, drawScale * 0.01);
+// ---------- SDF SHADER CAP (Signed Distance Field, pixel-perfect) ----------
+// Creates a flat quad in the bbox of the text, draped with a custom
+// ShaderMaterial that:
+//   • Reads the SDF in the fragment shader.
+//   • Discards pixels outside the silhouette → perfect glyph mask, no
+//     polygon clipping artifacts.
+//   • Computes a 4-tap gradient of the SDF and synthesises a 3D normal
+//     vec3(-grad, 1.0) that points from each edge toward the medial axis.
+//     Slopes naturally meet at the medial axis = sharp center ridge.
+//   • Shades it with PBR-ish Lambert + Blinn-Phong + Fresnel using the
+//     existing material sliders (color, metalness, roughness).
+//
+// Result: no extruded geometry, no self-intersections, pixel-perfect
+// "Chisel Hard" — exactly what Photoshop's Bevel & Emboss looks like.
+function buildSDFShaderCap(bodyGeom) {
+  const sdfData = computeGlyphSDF(bodyGeom);
+  if (!sdfData) return null;
+  const { dist, W, H, padPx, texW, texH, drawScale, w, h } = sdfData;
+
+  // Pack as Float32 RED texture (no banding). Distances stay in pixel units
+  // for the shader; we'll convert to world-space slope inside the shader.
+  const data = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) data[i] = dist[i];
+
+  const sdfTex = new THREE.DataTexture(data, W, H, THREE.RedFormat, THREE.FloatType);
+  sdfTex.minFilter = THREE.LinearFilter;
+  sdfTex.magFilter = THREE.LinearFilter;
+  sdfTex.wrapS = THREE.ClampToEdgeWrapping;
+  sdfTex.wrapT = THREE.ClampToEdgeWrapping;
+  sdfTex.needsUpdate = true;
+
+  // The plane is sized to the body bbox, but the SDF was rasterised onto a
+  // padded canvas. We therefore have to map world UVs (0..1 over the body
+  // bbox) into the inset region of the SDF texture: [padPx, padPx+texW] etc.
+  const padU = padPx / W;
+  const padV = padPx / H;
+  const insetU = texW / W;
+  const insetV = texH / H;
 
   const dirSign = state.innerBevelDirection === 'down' ? -1 : 1;
-  const vertOutside = new Uint8Array(pos.count);
 
-  for (let i = 0; i < pos.count; i++) {
-    const vx = pos.getX(i);
-    const vy = pos.getY(i);
-    const u = (vx + w / 2) / w;
-    const v = 1 - (vy + h / 2) / h;
-    const fx = padPx + u * texW;
-    const fy = padPx + v * texH;
-    const d = sampleBilinear(dist, W, H, fx, fy);
-    if (d <= 0.0) {
-      vertOutside[i] = 1;
-      pos.setZ(i, -0.002);
-      continue;
+  // Convert "Depth" slider to a slope strength. Bigger value → steeper
+  // slope per unit-pixel of distance → ridges look taller.
+  const slopeStrength = state.innerBevelDepth * 1.6;
+
+  const uniforms = {
+    uSdf:           { value: sdfTex },
+    uSdfTexel:      { value: new THREE.Vector2(1.0 / W, 1.0 / H) },
+    uUvOffset:      { value: new THREE.Vector2(padU, padV) },
+    uUvScale:       { value: new THREE.Vector2(insetU, insetV) },
+    uSlope:         { value: slopeStrength * dirSign },
+    uBaseColor:     { value: new THREE.Color(state.color) },
+    uMetalness:     { value: state.metalness },
+    uRoughness:     { value: Math.max(0.05, state.roughness) },
+    uEmissive:      { value: new THREE.Color(state.emissive) },
+    uEmissiveInt:   { value: state.emissiveIntensity },
+    uAmbientCol:    { value: new THREE.Color('#ffffff').multiplyScalar(state.ambientIntensity * 1.5) },
+    uKeyDir:        { value: new THREE.Vector3(state.dirX, state.dirY, state.dirZ).normalize() },
+    uKeyColor:      { value: new THREE.Color(state.dirColor).multiplyScalar(state.dirIntensity) },
+    uExposure:      { value: 1.0 },
+    uRimStrength:   { value: 0.35 },
+  };
+
+  const vertexShader = /* glsl */`
+    varying vec2 vUv;
+    varying vec3 vViewPos;
+    void main() {
+      vUv = uv;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      vViewPos = mv.xyz;
+      gl_Position = projectionMatrix * mv;
     }
-    // PRISMATIC: linear in distance, NO ceiling. The ridge forms naturally
-    // wherever two opposite slopes meet (= the medial axis).
-    pos.setZ(i, d * heightScale * dirSign);
-  }
-  pos.needsUpdate = true;
+  `;
 
-  // 5. Cull triangles fully outside the silhouette so the cap matches the
-  //    glyph shape, not a rectangle.
-  const oldIndex = plane.index;
-  const newIdx = [];
-  if (oldIndex) {
-    for (let i = 0; i < oldIndex.count; i += 3) {
-      const a = oldIndex.getX(i), b = oldIndex.getX(i + 1), c = oldIndex.getX(i + 2);
-      if (vertOutside[a] && vertOutside[b] && vertOutside[c]) continue;
-      newIdx.push(a, b, c);
+  const fragmentShader = /* glsl */`
+    precision highp float;
+
+    uniform sampler2D uSdf;
+    uniform vec2 uSdfTexel;
+    uniform vec2 uUvOffset;
+    uniform vec2 uUvScale;
+    uniform float uSlope;
+    uniform vec3 uBaseColor;
+    uniform float uMetalness;
+    uniform float uRoughness;
+    uniform vec3 uEmissive;
+    uniform float uEmissiveInt;
+    uniform vec3 uAmbientCol;
+    uniform vec3 uKeyDir;
+    uniform vec3 uKeyColor;
+    uniform float uExposure;
+    uniform float uRimStrength;
+
+    varying vec2 vUv;
+    varying vec3 vViewPos;
+
+    // ACES-ish tonemap so HDR-ish specular doesn't blow out.
+    vec3 aces(vec3 x) {
+      const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+      return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
     }
-    plane.setIndex(newIdx);
-  }
 
-  // 6. Convert to non-indexed → each triangle gets its own 3 vertices.
-  //    With flatShading=true, normals come from per-triangle cross products,
-  //    so the ridge along the medial axis stays razor-sharp instead of being
-  //    smoothed across by averaging neighbour-triangle normals.
-  const sharpGeom = plane.toNonIndexed();
-  sharpGeom.computeVertexNormals();
+    void main() {
+      // Map [0,1] body-bbox UV into the inset region of the SDF texture.
+      vec2 uv = uUvOffset + vUv * uUvScale;
 
-  let capMat;
-  if (state.shadingMode === 'matcap')      capMat = matcapMaterial.clone();
-  else if (state.shadingMode === 'normal') capMat = normalMaterial.clone();
-  else                                     capMat = pbrMaterial.clone();
-  capMat.flatShading = true;       // hard miters / facets, no shading smoothing
-  capMat.side = THREE.DoubleSide;  // safety against backface culling at sharp angles
-  capMat.needsUpdate = true;
+      float d = texture2D(uSdf, uv).r;
+      if (d <= 0.0) discard;
 
-  const mesh = new THREE.Mesh(sharpGeom, capMat);
+      // 4-tap gradient (in pixel units). Sub-pixel accurate because the
+      // texture stores Float32 distances.
+      float dl = texture2D(uSdf, uv - vec2(uSdfTexel.x, 0.0)).r;
+      float dr = texture2D(uSdf, uv + vec2(uSdfTexel.x, 0.0)).r;
+      float du = texture2D(uSdf, uv - vec2(0.0, uSdfTexel.y)).r;
+      float dv = texture2D(uSdf, uv + vec2(0.0, uSdfTexel.y)).r;
+      vec2 grad = vec2(dr - dl, dv - du) * 0.5;
+
+      // Length of grad is 1 px almost everywhere (it's a true Euclidean
+      // distance field) → slopes have constant steepness regardless of
+      // letter thickness. C¹-discontinuity along the medial axis gives us
+      // the sharp center ridge automatically. NaN-safe normalize.
+      vec2 dir = grad;
+      float gLen = length(dir);
+      if (gLen > 1e-6) dir /= gLen;
+
+      // Build the prismatic normal. uSlope controls how steep the slope is.
+      // Higher = taller-looking ridge.
+      vec3 n = normalize(vec3(-dir * uSlope, 1.0));
+
+      // View / light vectors (view-space; uKeyDir is interpreted as a
+      // world-light direction transformed implicitly through normal-matrix
+      // identity since our quad is axis-aligned to the camera here).
+      vec3 V = normalize(-vViewPos);
+      vec3 L = normalize(uKeyDir);
+      vec3 H = normalize(L + V);
+
+      float ndl = max(dot(n, L), 0.0);
+      float ndh = max(dot(n, H), 0.0);
+      float ndv = max(dot(n, V), 0.0);
+
+      // Diffuse — metals have no diffuse term in physically-based shading.
+      vec3 albedo = uBaseColor;
+      vec3 diffuse = albedo * (1.0 - uMetalness) * (uAmbientCol + ndl * uKeyColor);
+
+      // Specular highlight (Blinn-Phong) shaped by roughness.
+      float shininess = mix(8.0, 320.0, 1.0 - uRoughness);
+      float specPow = pow(ndh, shininess);
+
+      // Fresnel via Schlick — boosts highlight grazing-angle and the rim.
+      vec3 F0 = mix(vec3(0.04), albedo, uMetalness);
+      vec3 fres = F0 + (vec3(1.0) - F0) * pow(1.0 - max(dot(H, V), 0.0), 5.0);
+
+      vec3 specular = fres * specPow * uKeyColor;
+
+      // Rim light (crystal feel)
+      float rim = pow(1.0 - ndv, 3.0) * uRimStrength;
+      vec3 rimColor = mix(vec3(1.0), albedo, uMetalness) * rim;
+
+      // Emissive
+      vec3 emiss = uEmissive * uEmissiveInt;
+
+      vec3 col = diffuse + specular + rimColor + emiss;
+      col = aces(col * uExposure);
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader,
+    fragmentShader,
+    side: THREE.DoubleSide,
+    transparent: false,
+  });
+  // Ensure standard transparency / depth behaviour for clean compositing.
+  mat.toneMapped = false;
+
+  // A single big quad — the fragment shader does ALL the per-pixel shaping.
+  const plane = new THREE.PlaneGeometry(w, h, 1, 1);
+  const mesh = new THREE.Mesh(plane, mat);
   mesh.userData.disposableMaterial = true;
-
-  // Free the original indexed plane (toNonIndexed copies; original is now unused).
-  plane.dispose();
-
+  mesh.userData.disposableTexture = sdfTex;  // cleaned up on rebuild
   return mesh;
 }
 
+// ---------- TRUE PRISMATIC CHISEL HARD ----------
+// Slopes go all the way from glyph outline to the medial axis (the "skeleton"
+// of each stroke). No plateau on the front face. The ridge runs along the
+// medial axis; corners produce miter joints automatically because the
+// distance field is C¹-discontinuous there. Razor-sharp via:
 // ---------- SHARP / CHISEL ----------
 function buildSharpChiselCap(bodyGeom) {
   const bb = bodyGeom.boundingBox;
@@ -1125,7 +1236,7 @@ function bevelProfile(style, soften) {
 function updateText() {
   if (!currentFont) return;
 
-  // Dispose previous (geometry + per-instance materials like bevel caps)
+  // Dispose previous (geometry + per-instance materials/textures like bevel caps)
   while (textGroup.children.length) {
     const c = textGroup.children.pop();
     if (c.geometry) c.geometry.dispose();
@@ -1133,6 +1244,10 @@ function updateText() {
     // are reused across rebuilds, so only dispose materials marked as cap.
     if (c.userData && c.userData.disposableMaterial && c.material && c.material.dispose) {
       c.material.dispose();
+    }
+    // The SDF shader cap also owns its DataTexture — free it explicitly.
+    if (c.userData && c.userData.disposableTexture && c.userData.disposableTexture.dispose) {
+      c.userData.disposableTexture.dispose();
     }
   }
 
@@ -1443,6 +1558,22 @@ function applyMaterial() {
   textGroup.traverse((obj) => {
     if (obj.isMesh && obj.userData && obj.userData.disposableMaterial && obj.material) {
       const m = obj.material;
+      // SDF shader cap uses a ShaderMaterial with custom uniforms.
+      if (m.isShaderMaterial && m.uniforms) {
+        if (m.uniforms.uBaseColor)   m.uniforms.uBaseColor.value.set(state.color);
+        if (m.uniforms.uMetalness)   m.uniforms.uMetalness.value = state.metalness;
+        if (m.uniforms.uRoughness)   m.uniforms.uRoughness.value = Math.max(0.05, state.roughness);
+        if (m.uniforms.uEmissive)    m.uniforms.uEmissive.value.set(state.emissive);
+        if (m.uniforms.uEmissiveInt) m.uniforms.uEmissiveInt.value = state.emissiveIntensity;
+        if (m.uniforms.uAmbientCol)  m.uniforms.uAmbientCol.value.set('#ffffff').multiplyScalar(state.ambientIntensity * 1.5);
+        if (m.uniforms.uKeyDir)      m.uniforms.uKeyDir.value.set(state.dirX, state.dirY, state.dirZ).normalize();
+        if (m.uniforms.uKeyColor)    m.uniforms.uKeyColor.value.set(state.dirColor).multiplyScalar(state.dirIntensity);
+        if (m.uniforms.uSlope) {
+          const sign = state.innerBevelDirection === 'down' ? -1 : 1;
+          m.uniforms.uSlope.value = state.innerBevelDepth * 1.6 * sign;
+        }
+        return;
+      }
       if (m.color) m.color.set(state.color);
       if ('roughness' in m) m.roughness = state.roughness;
       if ('metalness' in m) m.metalness = state.metalness;
@@ -1718,7 +1849,7 @@ function buildPanel() {
       b.appendChild(makeSlider('Soften', 'innerBevelSoften', 0, 1, 0.01));
       b.appendChild(makeSlider('Quality', 'innerBevelResolution', 128, 1024, 32, true));
       b.appendChild(el('p', { class: 'hint' }, [
-        'Chisel Hard = prismatic (slopes meet at the centerline, no plateau). Higher Quality = sharper miters.',
+        'Chisel Hard = SDF shader (pixel-perfect, no geometry artifacts even on serifs). Higher Quality = sharper miters at corners.',
       ]));
 
       // Quick presets
@@ -2139,8 +2270,8 @@ function handleChange(key) {
   if (key === 'showShadows') ground.visible = state.showShadows;
   if (key === 'showGrid') gridHelper.visible = state.showGrid;
 
-  if (['ambientIntensity'].includes(key)) ambientLight.intensity = state.ambientIntensity;
-  if (['dirIntensity', 'dirColor', 'dirX', 'dirY', 'dirZ', 'dirShadow'].includes(key)) updateDirLight();
+  if (['ambientIntensity'].includes(key)) { ambientLight.intensity = state.ambientIntensity; applyMaterial(); }
+  if (['dirIntensity', 'dirColor', 'dirX', 'dirY', 'dirZ', 'dirShadow'].includes(key)) { updateDirLight(); applyMaterial(); }
   if (['light2On', 'light2Color', 'light2Intensity', 'light2X', 'light2Y', 'light2Z'].includes(key)) updateLight2();
   if (['light3On', 'light3Color', 'light3Intensity', 'light3X', 'light3Y', 'light3Z'].includes(key)) updateLight3();
 
