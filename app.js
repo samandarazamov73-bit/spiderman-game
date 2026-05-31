@@ -993,6 +993,14 @@ const DEFAULTS = {
   // samples the env map (HDRI) so each link reflects the scene like glass.
   necklaceMirror: true,
 
+  // Live scene reflections on the TEXT itself: a CubeCamera at the text's
+  // centre captures the scene every frame, so the text mirrors the spinning
+  // chain / decorations / floor / HDRI in real time. Like a polished window
+  // on the letters' surface. Off by default because it costs ~1ms per frame.
+  textLiveReflections: false,
+  textLiveReflectionStrength: 1.5,
+  textLiveReflectionEvery: 1,    // 1 = every frame, 2 = every other frame, ...
+
   // Animation
   autoRotate: false,           // simple toggle (back-compat)
   autoRotateSpeed: 1.2,
@@ -1193,6 +1201,23 @@ let reflectorMesh = null;
 // PMREM for HDRI
 const pmrem = new THREE.PMREMGenerator(renderer);
 pmrem.compileEquirectangularShader();
+
+// ============ LIVE SCENE REFLECTIONS (CubeCamera) ============
+// A small CubeCamera sits at the centre of the text. Once per frame (when
+// reflections are enabled) we hide the text itself, render the rest of the
+// scene into a 256² cube render target from that point, then assign that
+// target as the text material's envMap. The result: the text's surface
+// shows a LIVE reflection of the spinning chain / decorations / HDRI / floor
+// — like a real polished window on the letters' surface.
+const reflectionRT = new THREE.WebGLCubeRenderTarget(256, {
+  generateMipmaps: true,
+  minFilter: THREE.LinearMipmapLinearFilter,
+  type: THREE.HalfFloatType,
+});
+const reflectionCubeCamera = new THREE.CubeCamera(0.1, 60, reflectionRT);
+scene.add(reflectionCubeCamera);
+let _hdriEnvTexture = null;        // last loaded HDRI envmap (used as fallback)
+let _reflectionFrame = 0;          // render the cube every Nth frame for perf
 
 // ============ POST-PROCESSING ============
 let composer = null;
@@ -2456,7 +2481,12 @@ async function loadHDRI(presetId) {
   if (!preset.url) {
     const envScene = new RoomEnvironment();
     const envTex = pmrem.fromScene(envScene, 0.04).texture;
-    if (myId === hdriLoadingId) { scene.environment = envTex; currentHdriTexture = envTex; applyBackground(); }
+    if (myId === hdriLoadingId) {
+      scene.environment = envTex;
+      currentHdriTexture = envTex;
+      _hdriEnvTexture = envTex;
+      applyBackground();
+    }
     return;
   }
   return new Promise((resolve) => {
@@ -2464,7 +2494,12 @@ async function loadHDRI(presetId) {
       preset.url,
       (tex) => {
         const envTex = pmrem.fromEquirectangular(tex).texture;
-        if (myId === hdriLoadingId) { scene.environment = envTex; currentHdriTexture = envTex; applyBackground(); }
+        if (myId === hdriLoadingId) {
+          scene.environment = envTex;
+          currentHdriTexture = envTex;
+          _hdriEnvTexture = envTex;
+          applyBackground();
+        }
         tex.dispose();
         resolve();
       },
@@ -2473,7 +2508,12 @@ async function loadHDRI(presetId) {
         console.warn('HDRI load failed, using neutral room:', err);
         const envScene = new RoomEnvironment();
         const envTex = pmrem.fromScene(envScene, 0.04).texture;
-        if (myId === hdriLoadingId) { scene.environment = envTex; currentHdriTexture = envTex; applyBackground(); }
+        if (myId === hdriLoadingId) {
+          scene.environment = envTex;
+          currentHdriTexture = envTex;
+          _hdriEnvTexture = envTex;
+          applyBackground();
+        }
         resolve();
       }
     );
@@ -2781,6 +2821,23 @@ function buildPanel() {
 
     b.appendChild(makeToggle('Wireframe', 'wireframe'));
     b.appendChild(makeToggle('Flat Shading', 'flatShading'));
+
+    // ── LIVE WINDOW REFLECTIONS ──────────────────────────────────────────
+    // Cube-camera-driven mirror finish: the text reflects whatever is around
+    // it (chain, decorations, floor, HDRI) every frame. Costs roughly 1-2 ms
+    // depending on scene complexity, so the user can rate-limit it.
+    if (state.shadingMode === 'pbr') {
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(makeToggle('🪟 Live Window Reflections', 'textLiveReflections',
+        'Текст отражает крутящуюся цепь и сцену в реальном времени'));
+      if (state.textLiveReflections) {
+        b.appendChild(makeSlider('Reflection Strength', 'textLiveReflectionStrength', 0, 4, 0.05));
+        b.appendChild(makeSlider('Update Every N Frames', 'textLiveReflectionEvery', 1, 6, 1, true));
+        b.appendChild(el('p', { class: 'hint' }, [
+          'Higher "Update Every" = better FPS, less smooth reflection animation. Use Roughness ≈ 0 + Metalness 1 for the cleanest mirror look.',
+        ]));
+      }
+    }
 
     if (state.shadingMode === 'pbr') {
       const presets = el('div', { class: 'flex flex-col gap-2 pt-2', style: 'border-top: 1px solid rgba(54,58,69,0.15)' });
@@ -3448,6 +3505,7 @@ function handleChange(key) {
     applyBackground();
   }
   if (key === 'envPreset') { loadHDRI(state.envPreset); updateHud(); }
+  if (key === 'textLiveReflections') buildPanel();
   if (key === 'envIntensity') applyMaterial();
   if (key === 'showShadows') ground.visible = state.showShadows;
   if (key === 'showGrid') gridHelper.visible = state.showGrid;
@@ -4326,6 +4384,42 @@ function animate() {
   if (grainPass) grainPass.uniforms.time.value = totalTime;
 
   controls.update();
+
+  // ── LIVE TEXT REFLECTIONS ─────────────────────────────────────────────
+  // Update the cube-render-target every Nth frame so the text reflects the
+  // currently-spinning chain / decorations / floor in real time. Because the
+  // text would otherwise be IN its own reflection, we hide it for that pass.
+  if (state.textLiveReflections) {
+    _reflectionFrame++;
+    const every = Math.max(1, state.textLiveReflectionEvery | 0);
+    if (_reflectionFrame % every === 0) {
+      const wasVisible = textGroup.visible;
+      textGroup.visible = false;
+      // Position the cube cam at the text's centre (after the animation has
+      // moved/scaled the group, so reflections track the text's transform).
+      reflectionCubeCamera.position.set(0, 0, 0);
+      // Use the text group's world position as the reflection origin.
+      const wp = new THREE.Vector3();
+      textGroup.getWorldPosition(wp);
+      reflectionCubeCamera.position.copy(wp);
+      reflectionCubeCamera.update(renderer, scene);
+      textGroup.visible = wasVisible;
+      // Inject the live cube map as the PBR material's envMap. envMapIntensity
+      // controls how strongly the reflection blends with HDRI lighting.
+      if (pbrMaterial.envMap !== reflectionRT.texture) {
+        pbrMaterial.envMap = reflectionRT.texture;
+        pbrMaterial.needsUpdate = true;
+      }
+      pbrMaterial.envMapIntensity = state.envIntensity * 1.25 * state.textLiveReflectionStrength;
+    }
+  } else {
+    // Restore HDRI-only reflections when the toggle is off.
+    if (pbrMaterial.envMap !== null) {
+      pbrMaterial.envMap = null;
+      pbrMaterial.needsUpdate = true;
+      pbrMaterial.envMapIntensity = state.envIntensity * 1.25;
+    }
+  }
 
   // Render gradient first if needed
   renderer.autoClear = state.bgMode !== 'gradient';
