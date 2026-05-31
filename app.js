@@ -2861,11 +2861,60 @@ function buildPanel() {
         b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
         b.appendChild(el('span', { class: 'text-[10px] text-ink-200 uppercase tracking-wider' }, ['Material Presets']));
         const grid = el('div', { class: 'preset-grid', style: 'grid-template-columns: 1fr 1fr;' });
+        // Each preset RESETS all material flags that could darken / pollute
+        // the look (emissive, iridescence, sheen, transmission), then sets
+        // the specific values needed. This guarantees clicking 🪞 Mirror
+        // after 🪟 Glass yields a clean opaque mirror, and vice-versa.
+        const baseReset = {
+          emissive: '#000000', emissiveIntensity: 0,
+          iridescence: 0, iridescenceIOR: 1.3, iridescenceThickness: 400,
+          sheen: 0, sheenColor: '#ffffff', sheenRoughness: 0.5,
+          transmission: 0, ior: 1.5, thickness: 0.5,
+          reflectivity: 1.0,
+          // Make sure Inner Bevel doesn't darken the front face — we want
+          // the body's mirror surface front and centre.
+          innerBevel: false,
+          wireframe: false,
+          flatShading: false,
+        };
         const fxPresets = [
-          { name: '🪞 Perfect Mirror', vals: { metalness: 1, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, transmission: 0, color: '#ffffff', textLiveReflectionStrength: 2.5, textLiveReflectionRes: 1024 } },
-          { name: '🪟 Clean Glass',    vals: { metalness: 0, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, transmission: 1, ior: 1.5, thickness: 0.6, color: '#ffffff', textLiveReflectionStrength: 1.6, textLiveReflectionRes: 1024 } },
-          { name: '✨ Chrome',         vals: { metalness: 1, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02, transmission: 0, color: '#ffffff', textLiveReflectionStrength: 2.2, textLiveReflectionRes: 1024 } },
-          { name: '💎 Crystal',        vals: { metalness: 0, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, transmission: 0.85, ior: 1.5, thickness: 0.4, color: '#bae6fd', textLiveReflectionStrength: 1.4, textLiveReflectionRes: 1024 } },
+          // 🪞 PERFECT MIRROR — opaque, polished metal that reflects 100%
+          // of incoming light. metalness=1 + roughness=0 + a high envMap
+          // intensity = the surface IS the reflection. Color near-white
+          // because metallic surfaces tint reflections; pure white = neutral.
+          { name: '🪞 Perfect Mirror', vals: { ...baseReset,
+            metalness: 1, roughness: 0,
+            clearcoat: 0, clearcoatRoughness: 0,    // no coat — pure metal
+            color: '#ffffff',
+            textLiveReflectionStrength: 3.0,
+            textLiveReflectionRes: 1024,
+          }},
+          // 🪟 CLEAN GLASS — transparent surface with light bending through.
+          { name: '🪟 Clean Glass',    vals: { ...baseReset,
+            metalness: 0, roughness: 0,
+            clearcoat: 1, clearcoatRoughness: 0,
+            transmission: 1, ior: 1.5, thickness: 0.6,
+            color: '#ffffff',
+            textLiveReflectionStrength: 1.6,
+            textLiveReflectionRes: 1024,
+          }},
+          // ✨ CHROME — slightly rougher mirror, the look of polished steel.
+          { name: '✨ Chrome',         vals: { ...baseReset,
+            metalness: 1, roughness: 0.05,
+            clearcoat: 1, clearcoatRoughness: 0.02,
+            color: '#ffffff',
+            textLiveReflectionStrength: 2.5,
+            textLiveReflectionRes: 1024,
+          }},
+          // 💎 CRYSTAL — faceted glass with subtle cyan tint.
+          { name: '💎 Crystal',        vals: { ...baseReset,
+            metalness: 0, roughness: 0,
+            clearcoat: 1, clearcoatRoughness: 0,
+            transmission: 0.85, ior: 1.5, thickness: 0.4,
+            color: '#bae6fd',
+            textLiveReflectionStrength: 1.4,
+            textLiveReflectionRes: 1024,
+          }},
         ];
         fxPresets.forEach((p) => {
           const btn = el('button', { class: 'preset-btn', type: 'button', style: 'justify-content:center;' });
@@ -2873,8 +2922,12 @@ function buildPanel() {
           btn.addEventListener('click', () => {
             pushUndo();
             Object.assign(state, p.vals);
+            // Make sure live reflections are actually ON when applying any
+            // mirror/glass preset — that's the point of these presets.
+            state.textLiveReflections = true;
             buildPanel();
             applyMaterial();
+            updateText();   // rebuild bevel cap if innerBevel was just turned off
             // Quality change also rebuilds the cube target.
             buildReflectionRig(state.textLiveReflectionRes);
           });
