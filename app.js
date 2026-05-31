@@ -2430,8 +2430,24 @@ function applyNecklaceMaterial() {
 
 
 function applyMaterial() {
-  // PBR
-  pbrMaterial.color.set(state.color);
+  // PBR base
+  // In live-reflection MIRROR mode (metalness=1, roughness≈0) we PROTECT the
+  // reflection brightness: a dark base colour on a metal surface multiplies
+  // ALL reflected light by that colour, which is why pure-black tints made
+  // the text look black. We clamp the colour's luminance to ≥ 0.5 so the
+  // mirror always shows the chain. The user still gets a tinted look —
+  // gold, pink, cyan etc. — but never a crushed-black mirror.
+  const c = new THREE.Color(state.color);
+  if (state.textLiveReflections && state.metalness > 0.95 && state.roughness < 0.1) {
+    const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+    if (lum < 0.5) {
+      const k = 0.5 / Math.max(lum, 0.001);
+      c.r = Math.min(1, c.r * k);
+      c.g = Math.min(1, c.g * k);
+      c.b = Math.min(1, c.b * k);
+    }
+  }
+  pbrMaterial.color.copy(c);
   pbrMaterial.roughness = state.roughness;
   pbrMaterial.metalness = state.metalness;
   pbrMaterial.clearcoat = state.clearcoat;
@@ -4532,33 +4548,38 @@ function animate() {
       const wasVisible = textGroup.visible;
       textGroup.visible = false;
 
-      // Reflection "zoom out" — temporarily shrink the surrounding scene
-      // objects so the chain / decorations / particles appear smaller and
-      // farther away inside the mirror. distance < 1 = more zoom-out feel,
-      // = 1 means objects appear at their actual size in the reflection.
+      // Reflection "zoom out" — push surrounding objects FURTHER from the
+      // cube camera centre without shrinking them. From the cube cam's POV
+      // (which sits at the text centre) this makes them look smaller in the
+      // reflection while keeping their on-screen size unchanged.
+      //
+      //   distanceFactor = 1 / distance, applied to the radial position only
+      //   (not to scale, otherwise objects would shrink uniformly and angular
+      //   size would stay the same — which was the bug).
       const distance = THREE.MathUtils.clamp(state.textLiveReflectionDistance, 0.2, 1.0);
-      const savedNecklaceScale  = necklacePivot.scale.clone();
-      const savedDecoScale      = decorationsGroup.scale.clone();
-      const savedParticlesScale = particlesGroup.scale.clone();
-      if (distance < 0.999) {
-        necklacePivot.scale.multiplyScalar(distance);
-        decorationsGroup.scale.multiplyScalar(distance);
-        particlesGroup.scale.multiplyScalar(distance);
-      }
+      const pushFactor = 1 / Math.max(0.2, distance);   // 0.5 -> 2x further
 
-      // Position the cube cam at the text's centre (after the animation has
-      // moved/scaled the group, so reflections track the text's transform).
-      reflectionCubeCamera.position.set(0, 0, 0);
-      // Use the text group's world position as the reflection origin.
+      // Save link positions so we can restore them
+      const savedLinkPos = [];
+      necklaceRing.children.forEach((link) => {
+        savedLinkPos.push(link.position.clone());
+        link.position.multiplyScalar(pushFactor);
+      });
+      const savedDecoPos = [];
+      decorationsGroup.children.forEach((m) => {
+        savedDecoPos.push(m.position.clone());
+        m.position.multiplyScalar(pushFactor);
+      });
+
+      // Position the cube cam at the text's centre.
       const wp = new THREE.Vector3();
       textGroup.getWorldPosition(wp);
       reflectionCubeCamera.position.copy(wp);
       reflectionCubeCamera.update(renderer, scene);
 
       // Restore everything we touched
-      necklacePivot.scale.copy(savedNecklaceScale);
-      decorationsGroup.scale.copy(savedDecoScale);
-      particlesGroup.scale.copy(savedParticlesScale);
+      necklaceRing.children.forEach((link, i) => link.position.copy(savedLinkPos[i]));
+      decorationsGroup.children.forEach((m, i) => m.position.copy(savedDecoPos[i]));
       textGroup.visible = wasVisible;
 
       // Inject the live cube map as the PBR material's envMap. envMapIntensity
