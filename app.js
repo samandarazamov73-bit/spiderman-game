@@ -721,11 +721,149 @@ function mergeBufferGeometriesFallback(geoms) {
 function buildInnerBevelCap(bodyGeom) {
   if (!bodyGeom.boundingBox) bodyGeom.computeBoundingBox();
 
-  const sharpStyles = new Set(['chiselHard', 'chiselSoft', 'stroke']);
-  if (sharpStyles.has(state.innerBevelStyle)) {
+  // Chisel Hard → true prismatic medial-axis displacement (no plateau).
+  if (state.innerBevelStyle === 'chiselHard') {
+    return buildPrismaticChiselCap(bodyGeom);
+  }
+  // Chisel Soft / Stroke → TextGeometry trick (constant-width slopes).
+  if (state.innerBevelStyle === 'chiselSoft' || state.innerBevelStyle === 'stroke') {
     return buildSharpChiselCap(bodyGeom);
   }
   return buildSmoothBevelCap(bodyGeom);
+}
+
+// ---------- TRUE PRISMATIC CHISEL HARD ----------
+// Slopes go all the way from glyph outline to the medial axis (the "skeleton"
+// of each stroke). No plateau on the front face. The ridge runs along the
+// medial axis; corners produce miter joints automatically because the
+// distance field is C¹-discontinuous there. Razor-sharp via:
+//   1. Linear height = D × scale  (no clamping → no plateau)
+//   2. High-res grid (resolution slider drives subdivisions)
+//   3. Non-indexed buffer geometry → no normal averaging across the ridge
+//   4. flatShading = true on the material
+function buildPrismaticChiselCap(bodyGeom) {
+  const bb = bodyGeom.boundingBox;
+  const padPx = 24;
+  const w = bb.max.x - bb.min.x;
+  const h = bb.max.y - bb.min.y;
+  if (w < 0.001 || h < 0.001) return null;
+
+  // Render-resolution; higher = sharper miters at the cost of memory.
+  const targetMax = Math.min(640, Math.max(256, state.innerBevelResolution));
+  const aspect = w / h;
+  let texW, texH;
+  if (aspect >= 1) { texW = targetMax; texH = Math.max(96, Math.round(targetMax / aspect)); }
+  else            { texH = targetMax; texW = Math.max(96, Math.round(targetMax * aspect)); }
+
+  // 1. Rasterize silhouette via the same font shape paths as the 3D body.
+  const canvas = document.createElement('canvas');
+  canvas.width = texW + padPx * 2;
+  canvas.height = texH + padPx * 2;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const shapes = currentFont.generateShapes(state.text && state.text.length ? state.text : ' ', state.size);
+  let sxmin = Infinity, symin = Infinity, sxmax = -Infinity, symax = -Infinity;
+  shapes.forEach(s => {
+    const pts = s.getPoints(64);
+    pts.forEach(p => {
+      if (p.x < sxmin) sxmin = p.x; if (p.x > sxmax) sxmax = p.x;
+      if (p.y < symin) symin = p.y; if (p.y > symax) symax = p.y;
+    });
+  });
+  const sw = sxmax - sxmin, sh = symax - symin;
+  const drawScale = Math.min(texW / sw, texH / sh);
+  const offX = padPx + (texW - sw * drawScale) / 2 - sxmin * drawScale;
+  const offY = padPx + (texH - sh * drawScale) / 2 + symax * drawScale;
+  ctx.fillStyle = '#fff';
+  shapes.forEach(shape => {
+    ctx.beginPath();
+    drawShape(ctx, shape, drawScale, offX, offY);
+    if (shape.holes) shape.holes.forEach(hole => drawShape(ctx, hole, drawScale, offX, offY, true));
+    ctx.fill('evenodd');
+  });
+
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const W = canvas.width, H = canvas.height;
+  const inside = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) inside[i] = img.data[i * 4] > 128 ? 1 : 0;
+
+  // 2. Exact EDT (px distance to nearest exterior pixel).
+  const dist = exactEDT(inside, W, H);
+
+  // 3. Build a high-density grid plane covering the bbox.
+  //    Resolution roughly matches the rasterization grid so each cell maps to
+  //    1–2 pixels of the distance field — that's what gives us crisp miters.
+  const segX = Math.min(380, Math.max(120, Math.round(texW / 1.4)));
+  const segY = Math.min(380, Math.max(120, Math.round(texH / 1.4)));
+  const plane = new THREE.PlaneGeometry(w, h, segX, segY);
+  const pos = plane.attributes.position;
+
+  // 4. Photoshop "Depth" maps to overall height; "Size" is auto from medial.
+  //    `heightPerPx` converts pixel-distance into world-space ridge height.
+  //    The factor 0.018 was tuned so Depth=1 looks like a moderately raised
+  //    bevel without overpowering the body.
+  const heightPerPx = 0.018 * state.innerBevelDepth * (state.size / drawScale * drawScale) / 1.0;
+  const heightScale = state.innerBevelDepth * 0.045 / Math.max(0.0001, drawScale * 0.01);
+
+  const dirSign = state.innerBevelDirection === 'down' ? -1 : 1;
+  const vertOutside = new Uint8Array(pos.count);
+
+  for (let i = 0; i < pos.count; i++) {
+    const vx = pos.getX(i);
+    const vy = pos.getY(i);
+    const u = (vx + w / 2) / w;
+    const v = 1 - (vy + h / 2) / h;
+    const fx = padPx + u * texW;
+    const fy = padPx + v * texH;
+    const d = sampleBilinear(dist, W, H, fx, fy);
+    if (d <= 0.0) {
+      vertOutside[i] = 1;
+      pos.setZ(i, -0.002);
+      continue;
+    }
+    // PRISMATIC: linear in distance, NO ceiling. The ridge forms naturally
+    // wherever two opposite slopes meet (= the medial axis).
+    pos.setZ(i, d * heightScale * dirSign);
+  }
+  pos.needsUpdate = true;
+
+  // 5. Cull triangles fully outside the silhouette so the cap matches the
+  //    glyph shape, not a rectangle.
+  const oldIndex = plane.index;
+  const newIdx = [];
+  if (oldIndex) {
+    for (let i = 0; i < oldIndex.count; i += 3) {
+      const a = oldIndex.getX(i), b = oldIndex.getX(i + 1), c = oldIndex.getX(i + 2);
+      if (vertOutside[a] && vertOutside[b] && vertOutside[c]) continue;
+      newIdx.push(a, b, c);
+    }
+    plane.setIndex(newIdx);
+  }
+
+  // 6. Convert to non-indexed → each triangle gets its own 3 vertices.
+  //    With flatShading=true, normals come from per-triangle cross products,
+  //    so the ridge along the medial axis stays razor-sharp instead of being
+  //    smoothed across by averaging neighbour-triangle normals.
+  const sharpGeom = plane.toNonIndexed();
+  sharpGeom.computeVertexNormals();
+
+  let capMat;
+  if (state.shadingMode === 'matcap')      capMat = matcapMaterial.clone();
+  else if (state.shadingMode === 'normal') capMat = normalMaterial.clone();
+  else                                     capMat = pbrMaterial.clone();
+  capMat.flatShading = true;       // hard miters / facets, no shading smoothing
+  capMat.side = THREE.DoubleSide;  // safety against backface culling at sharp angles
+  capMat.needsUpdate = true;
+
+  const mesh = new THREE.Mesh(sharpGeom, capMat);
+  mesh.userData.disposableMaterial = true;
+
+  // Free the original indexed plane (toNonIndexed copies; original is now unused).
+  plane.dispose();
+
+  return mesh;
 }
 
 // ---------- SHARP / CHISEL ----------
@@ -1579,7 +1717,9 @@ function buildPanel() {
       b.appendChild(makeSlider('Size', 'innerBevelSize', 0.005, 0.3, 0.005));
       b.appendChild(makeSlider('Soften', 'innerBevelSoften', 0, 1, 0.01));
       b.appendChild(makeSlider('Quality', 'innerBevelResolution', 128, 1024, 32, true));
-      b.appendChild(el('p', { class: 'hint' }, ['Soften = 0 → razor-sharp ridge. Higher Quality = sharper edges (slower).']));
+      b.appendChild(el('p', { class: 'hint' }, [
+        'Chisel Hard = prismatic (slopes meet at the centerline, no plateau). Higher Quality = sharper miters.',
+      ]));
 
       // Quick presets
       const presets = [
