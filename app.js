@@ -706,12 +706,83 @@ function mergeBufferGeometriesFallback(geoms) {
 }
 
 // ============ INNER BEVEL (Photoshop-style) ============
-// We render the text silhouette to a 2D canvas, build a distance-field from
-// the outline (each pixel = distance to nearest edge), then build a high-res
-// plane and displace its vertices using a profile function — this is exactly
-// how Photoshop's "Bevel and Emboss" works internally.
+// Two algorithms behind the same UI:
+//
+//   • Chisel Hard / Soft / Stroke → TextGeometry-based approach.
+//     We build a `depth=0` extruded text with a single-segment bevel; that
+//     produces a "double pyramid" along each glyph outline. We center it on
+//     the body's front face so the back half hides inside the body, and the
+//     front half sticks out as a mathematically perfect, razor-sharp ridge.
+//
+//   • Smooth / Pillow → distance-field displacement on a high-res plane.
+//     We rasterize the silhouette, run an EXACT 1-D Saito-Toriwaki EDT (no
+//     chamfer artifacts) and bilinearly sample it from the displaced
+//     vertices, so the bevel band has perfectly circular contours.
 function buildInnerBevelCap(bodyGeom) {
   if (!bodyGeom.boundingBox) bodyGeom.computeBoundingBox();
+
+  const sharpStyles = new Set(['chiselHard', 'chiselSoft', 'stroke']);
+  if (sharpStyles.has(state.innerBevelStyle)) {
+    return buildSharpChiselCap(bodyGeom);
+  }
+  return buildSmoothBevelCap(bodyGeom);
+}
+
+// ---------- SHARP / CHISEL ----------
+function buildSharpChiselCap(bodyGeom) {
+  const bb = bodyGeom.boundingBox;
+
+  // Photoshop's "Size" is the slope width. With our text-geom trick the slope
+  // width = bevelSize. "Depth" multiplies the height (= bevelThickness).
+  // Stroke = a tiny ridge sat on the outline (small thickness/size both).
+  // Soft   = same shape but smoothed via more bevel segments + soften factor.
+  const size = state.innerBevelSize * state.size;       // world-units
+  const depth = state.innerBevelDepth * state.size * 0.45;
+  const segs =
+    state.innerBevelStyle === 'chiselHard' ? 1 :
+    state.innerBevelStyle === 'chiselSoft' ? Math.max(2, Math.round(2 + state.innerBevelSoften * 4)) :
+    /* stroke */ 1;
+
+  // For 'stroke' we want a *thin* ridge: clamp size/depth.
+  const useSize  = state.innerBevelStyle === 'stroke' ? Math.min(size, 0.04 * state.size) : size;
+  const useDepth = state.innerBevelStyle === 'stroke' ? Math.min(depth, 0.04 * state.size) : depth;
+
+  const cap = new TextGeometry(state.text || ' ', {
+    font: currentFont,
+    size: state.size,
+    depth: 0,                     // ← key: zero extrusion makes a double pyramid
+    curveSegments: state.curveSegments,
+    bevelEnabled: true,
+    bevelThickness: useDepth,
+    bevelSize: useSize,
+    bevelOffset: 0,
+    bevelSegments: segs,
+  });
+  cap.computeBoundingBox();
+  const cbb = cap.boundingBox;
+  // Centre cap horizontally / vertically same as body (z is naturally centered)
+  cap.translate(-(cbb.max.x + cbb.min.x) / 2, -(cbb.max.y + cbb.min.y) / 2, 0);
+  cap.computeVertexNormals();
+
+  // For chiselHard we want flat-shaded faces so the ridge is visually razor-sharp.
+  const useFlat = state.innerBevelStyle === 'chiselHard';
+
+  let capMat;
+  if (state.shadingMode === 'matcap')      capMat = matcapMaterial.clone();
+  else if (state.shadingMode === 'normal') capMat = normalMaterial.clone();
+  else                                     capMat = pbrMaterial.clone();
+  capMat.flatShading = useFlat;
+  capMat.needsUpdate = true;
+
+  const mesh = new THREE.Mesh(cap, capMat);
+  mesh.userData.disposableMaterial = true;
+  // Direction: 'down' = engraved (flip pyramid so it goes into the body).
+  if (state.innerBevelDirection === 'down') mesh.scale.z = -1;
+  return mesh;
+}
+
+// ---------- SMOOTH / PILLOW (displacement) ----------
+function buildSmoothBevelCap(bodyGeom) {
   const bb = bodyGeom.boundingBox;
   const padPx = 32;
   const w = bb.max.x - bb.min.x;
@@ -724,7 +795,7 @@ function buildInnerBevelCap(bodyGeom) {
   if (aspect >= 1) { texW = targetMax; texH = Math.max(64, Math.round(targetMax / aspect)); }
   else            { texH = targetMax; texW = Math.max(64, Math.round(targetMax * aspect)); }
 
-  // 1) Rasterize letter silhouette to a binary mask using the same font path.
+  // Rasterise the glyph silhouette via the font's own shape paths.
   const canvas = document.createElement('canvas');
   canvas.width = texW + padPx * 2;
   canvas.height = texH + padPx * 2;
@@ -732,10 +803,7 @@ function buildInnerBevelCap(bodyGeom) {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Use the font's own shape paths (currentFont.generateShapes) → preserves
-  // the *exact* glyph outlines used for the 3D body.
   const shapes = currentFont.generateShapes(state.text && state.text.length ? state.text : ' ', state.size);
-  // Compute bounding box of these shapes
   let sxmin = Infinity, symin = Infinity, sxmax = -Infinity, symax = -Infinity;
   shapes.forEach(s => {
     const pts = s.getPoints(64);
@@ -746,37 +814,31 @@ function buildInnerBevelCap(bodyGeom) {
   });
   const sw = sxmax - sxmin, sh = symax - symin;
   const sx = texW / sw, sy = texH / sh;
-  const scale = Math.min(sx, sy);
-  const offX = padPx + (texW - sw * scale) / 2 - sxmin * scale;
-  const offY = padPx + (texH - sh * scale) / 2 + symax * scale;
+  const drawScale = Math.min(sx, sy);
+  const offX = padPx + (texW - sw * drawScale) / 2 - sxmin * drawScale;
+  const offY = padPx + (texH - sh * drawScale) / 2 + symax * drawScale;
   ctx.fillStyle = '#fff';
   shapes.forEach(shape => {
     ctx.beginPath();
-    drawShape(ctx, shape, scale, offX, offY);
+    drawShape(ctx, shape, drawScale, offX, offY);
     if (shape.holes) {
-      shape.holes.forEach(hole => drawShape(ctx, hole, scale, offX, offY, true));
+      shape.holes.forEach(hole => drawShape(ctx, hole, drawScale, offX, offY, true));
     }
     ctx.fill('evenodd');
   });
 
-  // 2) Read pixels and build a binary inside/outside grid.
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const W = canvas.width, H = canvas.height;
   const inside = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) inside[i] = img.data[i * 4] > 128 ? 1 : 0;
 
-  // 3) Compute Euclidean distance transform — for every interior pixel, the
-  //    distance (in pixels) to the nearest exterior pixel. Two-pass approx.
-  const dist = computeEDT(inside, W, H);
+  // Exact Saito-Toriwaki EDT: gives perfectly circular distance contours
+  // (no chamfer artifacts → no "крученность" on smooth shapes).
+  const dist = exactEDT(inside, W, H);
 
-  // 4) Convert Photoshop "Size" (in world units) → pixel radius.
-  //    state.innerBevelSize is in font-size units; one font-size unit ≈
-  //    `scale` pixels, but font-size ≈ state.size, so: bevelPixels = size×scale.
-  const bevelPixels = Math.max(2, state.innerBevelSize * scale);
-  const heightWorld = state.innerBevelDepth * 0.4;  // world-space ridge height
+  const bevelPixels = Math.max(2, state.innerBevelSize * drawScale);
+  const heightWorld = state.innerBevelDepth * 0.4;
 
-  // 5) Build a plane mesh covering the text bbox at high resolution and
-  //    displace its Z from the distance field via a profile function.
   const segX = Math.min(380, Math.max(60, Math.round(texW / 1.5)));
   const segY = Math.min(380, Math.max(60, Math.round(texH / 1.5)));
   const plane = new THREE.PlaneGeometry(w, h, segX, segY);
@@ -784,34 +846,27 @@ function buildInnerBevelCap(bodyGeom) {
   const dirSign = state.innerBevelDirection === 'down' ? -1 : 1;
   const profile = bevelProfile(state.innerBevelStyle, state.innerBevelSoften);
 
-  // Optional: punch out exterior so the cap matches the letter silhouette.
-  // We mark vertices outside as having z=0 and slightly behind so they sink
-  // into the body; we additionally cull triangles fully outside via a mask.
   const vertOutside = new Uint8Array(pos.count);
-
   for (let i = 0; i < pos.count; i++) {
     const vx = pos.getX(i);
     const vy = pos.getY(i);
-    // Map vertex (centered around 0,0 in world) → texture pixel
     const u = (vx + w / 2) / w;
     const v = 1 - (vy + h / 2) / h;
-    const tx = padPx + Math.round(u * texW);
-    const ty = padPx + Math.round(v * texH);
-    const idx = ty * W + tx;
-    const d = (idx >= 0 && idx < dist.length) ? dist[idx] : 0;
+    // Bilinear sample of distance field
+    const fx = padPx + u * texW;
+    const fy = padPx + v * texH;
+    const d = sampleBilinear(dist, W, H, fx, fy);
     if (d <= 0) {
       vertOutside[i] = 1;
-      pos.setZ(i, -0.002);  // slightly behind body front face
+      pos.setZ(i, -0.002);
       continue;
     }
-    // Normalised distance into the bevel region (0=outline edge, 1=ridge top)
     const t = Math.min(1, d / bevelPixels);
     const z = profile(t) * heightWorld * dirSign;
     pos.setZ(i, z);
   }
   pos.needsUpdate = true;
 
-  // Cull triangles where all three vertices are outside the silhouette.
   const oldIndex = plane.index;
   const newIdx = [];
   if (oldIndex) {
@@ -824,20 +879,11 @@ function buildInnerBevelCap(bodyGeom) {
   }
   plane.computeVertexNormals();
 
-  // For "Smooth" style we want averaged normals (already smooth from the
-  // continuous profile). For "Chisel Hard" we want flat shading per face so
-  // the ridge is visually razor-sharp.
-  const useFlat = (state.innerBevelStyle === 'chiselHard' || state.innerBevelStyle === 'stroke');
-  // Choose a material that follows the active body shading.
   let capMat;
-  if (state.shadingMode === 'matcap') {
-    capMat = matcapMaterial.clone();
-  } else if (state.shadingMode === 'normal') {
-    capMat = normalMaterial.clone();
-  } else {
-    capMat = pbrMaterial.clone();
-  }
-  capMat.flatShading = useFlat;
+  if (state.shadingMode === 'matcap')      capMat = matcapMaterial.clone();
+  else if (state.shadingMode === 'normal') capMat = normalMaterial.clone();
+  else                                     capMat = pbrMaterial.clone();
+  capMat.flatShading = false;  // smooth styles want averaged normals
   capMat.needsUpdate = true;
 
   const mesh = new THREE.Mesh(plane, capMat);
@@ -855,80 +901,83 @@ function drawShape(ctx, shape, scale, offX, offY) {
   ctx.closePath();
 }
 
-// Two-pass squared-EDT (Felzenszwalb is overkill; this is a fast approximation
-// using a chamfer-distance-like double sweep that's good enough for bevels).
-function computeEDT(mask, W, H) {
-  const INF = 1e9;
-  const d = new Float32Array(W * H);
-  for (let i = 0; i < W * H; i++) d[i] = mask[i] ? INF : 0;
-  // Forward pass
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const i = y * W + x;
-      if (!mask[i]) continue;
-      let m = d[i];
-      if (x > 0)        m = Math.min(m, d[i - 1] + 1);
-      if (y > 0)        m = Math.min(m, d[i - W] + 1);
-      if (x > 0 && y > 0)        m = Math.min(m, d[i - W - 1] + Math.SQRT2);
-      if (x < W - 1 && y > 0)    m = Math.min(m, d[i - W + 1] + Math.SQRT2);
-      d[i] = m;
-    }
-  }
-  // Backward pass
-  for (let y = H - 1; y >= 0; y--) {
-    for (let x = W - 1; x >= 0; x--) {
-      const i = y * W + x;
-      if (!mask[i]) continue;
-      let m = d[i];
-      if (x < W - 1)            m = Math.min(m, d[i + 1] + 1);
-      if (y < H - 1)            m = Math.min(m, d[i + W] + 1);
-      if (x < W - 1 && y < H - 1) m = Math.min(m, d[i + W + 1] + Math.SQRT2);
-      if (x > 0 && y < H - 1)     m = Math.min(m, d[i + W - 1] + Math.SQRT2);
-      d[i] = m;
-    }
-  }
-  return d;
+function sampleBilinear(arr, W, H, fx, fy) {
+  const x0 = Math.floor(fx), y0 = Math.floor(fy);
+  const x1 = Math.min(W - 1, x0 + 1), y1 = Math.min(H - 1, y0 + 1);
+  const dx = fx - x0, dy = fy - y0;
+  if (x0 < 0 || y0 < 0 || x0 >= W || y0 >= H) return 0;
+  const a = arr[y0 * W + x0];
+  const b = arr[y0 * W + x1];
+  const c = arr[y1 * W + x0];
+  const d = arr[y1 * W + x1];
+  return (a * (1 - dx) + b * dx) * (1 - dy) + (c * (1 - dx) + d * dx) * dy;
 }
 
-// Photoshop-style profile functions. Input t ∈ [0,1] = normalised distance
-// into the bevel band. Output ∈ [0,1] = ridge height factor.
+// Exact Euclidean distance transform, Felzenszwalb & Huttenlocher 2012.
+// Returns *distance in pixels* to the nearest exterior pixel for each
+// interior pixel (0 outside).
+function exactEDT(mask, W, H) {
+  const INF = 1e20;
+  const f = new Float64Array(Math.max(W, H));
+  const v = new Int32Array(Math.max(W, H));
+  const z = new Float64Array(Math.max(W, H) + 1);
+  const sq = new Float64Array(W * H);
+
+  // Pass 1: column-wise 1D EDT on f(x) = 0 if exterior, +INF if interior.
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) f[y] = mask[y * W + x] ? INF : 0;
+    edt1D(f, H, v, z);
+    for (let y = 0; y < H; y++) sq[y * W + x] = f[y];
+  }
+  // Pass 2: row-wise 1D EDT (now operating on squared distances)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) f[x] = sq[y * W + x];
+    edt1D(f, W, v, z);
+    for (let x = 0; x < W; x++) sq[y * W + x] = f[x];
+  }
+  // sqrt to get pixel distances; clamp to 0 for exterior.
+  const out = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) out[i] = mask[i] ? Math.sqrt(sq[i]) : 0;
+  return out;
+}
+
+function edt1D(f, n, v, z) {
+  let k = 0;
+  v[0] = 0;
+  z[0] = -Infinity;
+  z[1] = +Infinity;
+  for (let q = 1; q < n; q++) {
+    let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    while (s <= z[k]) {
+      k--;
+      s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    }
+    k++;
+    v[k] = q;
+    z[k] = s;
+    z[k + 1] = +Infinity;
+  }
+  k = 0;
+  // Reuse f as the temp output buffer (we read v/z, write f back).
+  const tmp = new Float64Array(n);
+  for (let q = 0; q < n; q++) {
+    while (z[k + 1] < q) k++;
+    tmp[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
+  }
+  for (let q = 0; q < n; q++) f[q] = tmp[q];
+}
+
+// Photoshop-style profile functions (for displacement-based smooth/pillow only).
 function bevelProfile(style, soften) {
-  // soften: 0 = razor sharp, 1 = fully smoothed
   const s = THREE.MathUtils.clamp(soften, 0, 1);
   switch (style) {
-    case 'chiselHard':
-      // Linear ramp → angular peak → razor-sharp ridge with flat sides
-      return (t) => {
-        if (s < 0.01) return Math.min(1, t);  // pure linear = perfect chisel
-        // Mix linear with smoothstep based on `s`
-        const lin = Math.min(1, t);
-        const sm = t * t * (3 - 2 * t);
-        return lin * (1 - s) + sm * s;
-      };
-    case 'chiselSoft':
-      // Linear with rounded peak
-      return (t) => {
-        const k = 0.85 + s * 0.15;
-        const peakStart = k;
-        if (t < peakStart) return t / peakStart;
-        const tn = (t - peakStart) / (1 - peakStart);
-        return 1 - Math.pow(1 - tn, 2) * 0;  // rolls over at top
-      };
     case 'smooth':
-      // Sine half-wave — Photoshop's "Smooth" (gentle hill)
       return (t) => Math.sin(t * Math.PI / 2);
     case 'pillow':
-      // Concave start, convex finish — looks like a puffy pillow
       return (t) => {
         const a = 1 - Math.cos(t * Math.PI / 2);
         const b = Math.sin(t * Math.PI / 2);
         return a * 0.4 + b * 0.6;
-      };
-    case 'stroke':
-      // Sharp triangle peak — only a thin ridge along the outline
-      return (t) => {
-        const peak = 0.5;
-        return t < peak ? t / peak : 1 - (t - peak) / (1 - peak);
       };
     default:
       return (t) => Math.min(1, t);
@@ -1091,6 +1140,10 @@ function rebuildDecorations() {
 function animateDecorations(dt, totalT) {
   if (state.decorationType === 'none') return;
   decorationsGroup.children.forEach((mesh) => {
+    // Skip while user is currently dragging this item.
+    if (mesh.userData.dragging) return;
+    // Pinned items keep their custom position/rotation (no float, no spin).
+    if (mesh.userData.pinned) return;
     const i = mesh.userData.seed || 0;
     if (state.decorationFloat) {
       const phase = hashSeed(i, 11) * Math.PI * 2;
@@ -1102,6 +1155,111 @@ function animateDecorations(dt, totalT) {
       mesh.rotation.x = mesh.userData.baseRot.x + totalT * sx;
       mesh.rotation.y = mesh.userData.baseRot.y + totalT * sy;
     }
+  });
+}
+
+// ============ DECORATION DRAG-AND-DROP ============
+// Pointer down on a decoration → grab it. Drag along a plane that faces the
+// camera and passes through the item's current position. Pointer up → release.
+// While dragging, OrbitControls is disabled so the camera doesn't move.
+const dragRaycaster = new THREE.Raycaster();
+const dragPointerNDC = new THREE.Vector2();
+const dragPlane = new THREE.Plane();
+const dragPlaneNormal = new THREE.Vector3();
+const dragHitPoint = new THREE.Vector3();
+const dragOffset = new THREE.Vector3();
+let draggedItem = null;
+let dragMoved = false;
+
+function pointerToNDC(ev) {
+  const r = canvas.getBoundingClientRect();
+  dragPointerNDC.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+  dragPointerNDC.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+}
+
+function onDecorationPointerDown(ev) {
+  if (state.decorationType === 'none' || decorationsGroup.children.length === 0) return;
+  // Only left button / primary touch
+  if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+
+  pointerToNDC(ev);
+  dragRaycaster.setFromCamera(dragPointerNDC, camera);
+  const hits = dragRaycaster.intersectObjects(decorationsGroup.children, true);
+  if (!hits.length) return;
+
+  // Find the top-level decoration (raycast may hit a child geometry).
+  let target = hits[0].object;
+  while (target.parent && target.parent !== decorationsGroup) target = target.parent;
+
+  draggedItem = target;
+  draggedItem.userData.dragging = true;
+  dragMoved = false;
+
+  // Build a plane through the item's position, facing the camera.
+  camera.getWorldDirection(dragPlaneNormal).negate();
+  dragPlane.setFromNormalAndCoplanarPoint(dragPlaneNormal, target.position);
+  dragRaycaster.ray.intersectPlane(dragPlane, dragHitPoint);
+  dragOffset.copy(target.position).sub(dragHitPoint);
+
+  // Disable orbit so the camera doesn't move while we drag.
+  controls.enabled = false;
+  canvas.style.cursor = 'grabbing';
+
+  // Capture pointer so we keep getting events even if we leave the canvas.
+  canvas.setPointerCapture && canvas.setPointerCapture(ev.pointerId);
+  // Stop OrbitControls from also seeing this event.
+  ev.stopImmediatePropagation();
+  ev.preventDefault();
+}
+
+let lastHoverCheck = 0;
+function onDecorationPointerMove(ev) {
+  if (!draggedItem) {
+    // Hover cursor feedback (throttled — raycasting on every mouse move is wasteful).
+    const now = performance.now();
+    if (now - lastHoverCheck > 80 && state.decorationType !== 'none' && decorationsGroup.children.length) {
+      lastHoverCheck = now;
+      pointerToNDC(ev);
+      dragRaycaster.setFromCamera(dragPointerNDC, camera);
+      const hits = dragRaycaster.intersectObjects(decorationsGroup.children, true);
+      canvas.style.cursor = hits.length ? 'grab' : '';
+    }
+    return;
+  }
+
+  pointerToNDC(ev);
+  dragRaycaster.setFromCamera(dragPointerNDC, camera);
+  if (dragRaycaster.ray.intersectPlane(dragPlane, dragHitPoint)) {
+    draggedItem.position.copy(dragHitPoint).add(dragOffset);
+    // After moving, pin the item so float/spin no longer overrides position.
+    draggedItem.userData.pinned = true;
+    // Update basePos so animation (if re-enabled) uses the new anchor.
+    draggedItem.userData.basePos.copy(draggedItem.position);
+    dragMoved = true;
+  }
+}
+
+function onDecorationPointerUp(ev) {
+  if (!draggedItem) return;
+  draggedItem.userData.dragging = false;
+  draggedItem = null;
+  controls.enabled = true;
+  canvas.style.cursor = '';
+  if (canvas.releasePointerCapture && ev.pointerId !== undefined) {
+    try { canvas.releasePointerCapture(ev.pointerId); } catch {}
+  }
+}
+
+canvas.addEventListener('pointerdown', onDecorationPointerDown, { capture: true });
+canvas.addEventListener('pointermove', onDecorationPointerMove);
+canvas.addEventListener('pointerup', onDecorationPointerUp, { capture: true });
+canvas.addEventListener('pointercancel', onDecorationPointerUp, { capture: true });
+
+// Reset all manual placements (used by the panel button).
+function unpinAllDecorations() {
+  decorationsGroup.children.forEach((m) => {
+    m.userData.pinned = false;
+    if (m.userData.basePos) m.position.copy(m.userData.basePos);
   });
 }
 
@@ -1543,6 +1701,14 @@ function buildPanel() {
       b.appendChild(makeSlider('Glow', 'decorationEmissive', 0, 4, 0.05));
       b.appendChild(makeToggle('Float Animation', 'decorationFloat'));
       b.appendChild(makeToggle('Spin Each Item', 'decorationSpinIndividual'));
+
+      b.appendChild(el('div', { style: 'border-top: 1px solid rgba(54,58,69,0.15); padding-top: 4px' }));
+      b.appendChild(el('p', { class: 'hint' }, [
+        '✋ Drag items in the viewport to place them anywhere. Dragged items get pinned and stop floating.',
+      ]));
+      const resetBtn = el('button', { class: 'btn-secondary', type: 'button' }, ['↺ Reset positions']);
+      resetBtn.addEventListener('click', () => { unpinAllDecorations(); });
+      b.appendChild(resetBtn);
     }
 
     // Quick "vibe" presets — combinations that look great
